@@ -5,9 +5,13 @@ build/
 # Screenshot hook output (OB_SHOT), written to the launch cwd
 openball_shot.png
 
-# Determinism-gate scratch output
+# Determinism-gate scratch output (CI writes these into the workspace: MSYS2's
+# shell has no usable /tmp, so workspace-relative paths are the portable choice)
 c.txt
+r.txt
 ref.txt
+native.txt
+wasm.txt
 
 # Local reference material for physics tuning. Never commit the original
 # game or its assets - see README. Gameplay captures of the original are used

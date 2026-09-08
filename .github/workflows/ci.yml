@@ -29,10 +29,10 @@ jobs:
         run: |
           B=../build-native
           echo "--- fixed_test";  "$B/fixed_test"
-          echo "--- const_test";  "$B/const_test"  > /tmp/const.txt
-          diff --strip-trailing-cr tests/const_golden.txt  /tmp/const.txt
-          echo "--- replay_test"; "$B/replay_test" > /tmp/replay.txt
-          diff --strip-trailing-cr tests/replay_golden.txt /tmp/replay.txt
+          echo "--- const_test";  "$B/const_test"  > c.txt
+          diff --strip-trailing-cr tests/const_golden.txt  c.txt
+          echo "--- replay_test"; "$B/replay_test" > r.txt
+          diff --strip-trailing-cr tests/replay_golden.txt r.txt
           echo "all goldens match"
 
   windows:
@@ -55,10 +55,10 @@ jobs:
         run: |
           B=../build-native
           echo "--- fixed_test";  "$B/fixed_test.exe"
-          echo "--- const_test";  "$B/const_test.exe"  > /tmp/const.txt
-          diff --strip-trailing-cr tests/const_golden.txt  /tmp/const.txt
-          echo "--- replay_test"; "$B/replay_test.exe" > /tmp/replay.txt
-          diff --strip-trailing-cr tests/replay_golden.txt /tmp/replay.txt
+          echo "--- const_test";  "$B/const_test.exe"  > c.txt
+          diff --strip-trailing-cr tests/const_golden.txt  c.txt
+          echo "--- replay_test"; "$B/replay_test.exe" > r.txt
+          diff --strip-trailing-cr tests/replay_golden.txt r.txt
           echo "all goldens match"
 
   web:
@@ -98,8 +98,8 @@ jobs:
           cmake --build ../b-web -j"$(nproc)" --target replay_test
       - name: native == wasm, byte for byte
         run: |
-          ../b-native/replay_test > /tmp/native.txt
-          node ../b-web/replay_test.js > /tmp/wasm.txt
-          diff --strip-trailing-cr /tmp/native.txt /tmp/wasm.txt
-          diff --strip-trailing-cr tests/replay_golden.txt /tmp/native.txt
+          ../b-native/replay_test > native.txt
+          node ../b-web/replay_test.js > wasm.txt
+          diff --strip-trailing-cr native.txt wasm.txt
+          diff --strip-trailing-cr tests/replay_golden.txt native.txt
           echo "native and wasm agree, and both match the committed golden"
