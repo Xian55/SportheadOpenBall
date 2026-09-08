@@ -149,7 +149,9 @@ void touch_update(void) {
       continue;
     }
     if (in_kick(p.x, p.y)) { m |= IN_KICK; continue; }
-    if (g_stick_id < 0 && p.x < sw * 0.5f) {
+    // == -1, not < 0: STICK_MOUSE is negative too, and treating it as "free"
+    // let a stale mouse claim re-acquire the stick every frame.
+    if (g_stick_id == -1 && p.x < sw * 0.5f) {
       g_stick_id = id;              // float the stick to where the thumb landed
       g_bx = p.x; g_by = p.y;
       g_kx = p.x; g_ky = p.y;
@@ -158,9 +160,16 @@ void touch_update(void) {
   }
   if (g_stick_id >= 0 && !stick_seen) g_stick_id = -1;   // lifted: recentre
 
-  // Mouse counts too, but only once touch has been seen, so the overlay does not
-  // hijack ordinary desktop clicks.
-  if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+  // Mouse is for DESKTOP testing only, and is read solely when no finger is
+  // down. Mobile browsers synthesise mouse events from touches, so without this
+  // guard the two paths fight every frame: the touch loop would engage the stick
+  // with a real id, the emulated mouse would immediately re-claim it as
+  // STICK_MOUSE and re-base to the finger, and the next frame the id no longer
+  // matched so the stick re-acquired at the thumb's new position - the base
+  // chasing the finger instead of staying put. The same collision killed
+  // movement the moment KICK was pressed, because the emulated mouse landed in
+  // the kick circle and stopped feeding the stick.
+  if (n == 0 && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
     Vector2 p = GetMousePosition();
     if (in_kick(p.x, p.y)) {
       m |= IN_KICK;
@@ -169,7 +178,7 @@ void touch_update(void) {
       g_kx = p.x; g_ky = p.y;
     }
   } else if (g_stick_id == STICK_MOUSE) {
-    g_stick_id = -1;
+    g_stick_id = -1;   // mouse released, or a finger took over
   }
 
   if (g_stick_id != -1) { clamp_knob(); m |= stick_bits(); }

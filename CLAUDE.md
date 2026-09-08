@@ -144,6 +144,14 @@ goal-celebration overlay) and **kick impulse**. Do not present either as derived
   wherever there is room - that asymmetry is what the layout exploits. Movement
   is now a floating stick rather than discrete arrows, which sidesteps the axis
   problem entirely by BEING the axis, and folds jump into pushing up.
+- **Mobile browsers synthesise MOUSE events from touches.** Any mouse handling
+  must be gated behind `GetTouchPointCount() == 0`, or the touch and mouse paths
+  fight each other every frame. Here it made the floating stick's base chase the
+  thumb (touch engaged it, the emulated mouse re-claimed and re-based it, the id
+  stopped matching, it re-acquired at the new position) and killed movement the
+  instant KICK was pressed, because the emulated mouse landed in the kick circle.
+  raylib's touch IDs are fine - it copies the browser's identifiers, which are
+  stable - so the IDs were never the problem.
 - **Touch controls are sized in SCREEN space, never virtual pitch space.** In virtual
   space they shrink with the letterbox: a landscape phone scales the pitch by ~0.54,
   turning a 56 px button into ~30 physical px against a ~48 px minimum target. They
