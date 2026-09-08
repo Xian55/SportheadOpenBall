@@ -102,6 +102,11 @@ static void frame(void) {
     render_export_shot("openball_shot.png");
     // Also capture the real WINDOW framebuffer: the virtual export cannot show
     // a presentation bug, which is exactly how an oversized blit slipped past.
+    // CAUTION reading these: TakeScreenshot reads render*GetWindowScaleDPI().
+    // Without HIGHDPI that correctly captures the real framebuffer, but WITH it
+    // render already IS the framebuffer, so the capture over-reads by the DPI
+    // factor and the extra margin is garbage. Judge the window by eye, not by
+    // this file.
     if (getenv("OB_SHOT_WIN")) TakeScreenshot("openball_win.png");
     printf("OB_SHOT frame=%d sim_frame=%u checksum=%08x score=%u-%u\n",
            g_frames, g_state.frame, checksum_state(&g_state),
@@ -124,11 +129,17 @@ int main(void) {
   if (seed) g_seed = (uint32_t)strtoul(seed, NULL, 0);
 
   SetTraceLogLevel(LOG_WARNING);
-  // No FLAG_WINDOW_HIGHDPI: with it, raylib's logical size and framebuffer size
-  // diverge on a scaled display and the letterbox maths has to guess which one
-  // each API wants. The render texture already gives us a fixed 1280x720 image;
-  // letting the OS upscale it is a fair trade for unambiguous coordinates.
-  SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+  // FLAG_WINDOW_HIGHDPI is REQUIRED on a scaled display, from raylib 5.5's
+  // source: without it InitPlatform never calls glfwGetFramebufferSize and just
+  // assumes the framebuffer equals the requested size. At 125% scaling Windows
+  // hands back a larger buffer anyway, so raylib sets a 1280x720 viewport inside
+  // a 1600x900 one and the scene renders into a corner with black bars.
+  //
+  // With the flag it queries the real framebuffer, sets render to match, and
+  // installs a screenScale matrix - so drawing still uses LOGICAL coordinates
+  // (GetScreenWidth/Height) and raylib scales them onto the full buffer. That is
+  // why the letterbox maths in render.c uses the logical size.
+  SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
   InitWindow(1280, 720, "SportheadOpenBall " OB_VERSION);
   SetTargetFPS(60);
 

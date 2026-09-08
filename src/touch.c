@@ -15,6 +15,7 @@
 #include "raylib.h"
 #include "touch.h"
 #include "config.h"
+#include "render.h"
 
 #define NBTN 4
 
@@ -38,8 +39,24 @@ static void layout(void) {
   if (r < 46.0f) r = 46.0f;
   if (r > 92.0f) r = 92.0f;
   float m = r * 0.55f;                 // margin from the screen edges
-  float y = sh - r - m;
 
+  // If the letterbox leaves a wide enough bar down each side - which a tall
+  // phone (20:9, 19.5:9) does - put the controls THERE. They then cover no
+  // pitch at all. On 16:9, or on a small viewport where the bar is too narrow,
+  // fall back to the bottom corners and accept overlapping the goalmouths;
+  // shrinking the pitch to make room costs more than it buys on a small screen.
+  Rectangle pr = render_pitch_rect();
+  if (pr.x >= r * 2.1f) {
+    float lx = pr.x * 0.5f, rx = sw - pr.x * 0.5f;
+    float y0 = sh * 0.5f - r * 1.15f, y1 = sh * 0.5f + r * 1.15f;
+    g_btn[0] = (TouchBtn){ lx, y0, r, IN_LEFT,  "<"    };
+    g_btn[1] = (TouchBtn){ lx, y1, r, IN_RIGHT, ">"    };
+    g_btn[2] = (TouchBtn){ rx, y0, r, IN_KICK,  "KICK" };
+    g_btn[3] = (TouchBtn){ rx, y1, r, IN_JUMP,  "JUMP" };
+    return;
+  }
+
+  float y = sh - r - m;
   g_btn[0] = (TouchBtn){ m + r,                 y, r, IN_LEFT,  "<"    };
   g_btn[1] = (TouchBtn){ m + r * 3.3f,          y, r, IN_RIGHT, ">"    };
   g_btn[2] = (TouchBtn){ sw - m - r * 3.3f,     y, r, IN_KICK,  "KICK" };
@@ -86,13 +103,13 @@ void touch_draw(void) {
   layout();
   for (int b = 0; b < NBTN; b++) {
     int   held = (g_mask & g_btn[b].bit) != 0;
-    Color fill = held ? Fade(RAYWHITE, 0.34f) : Fade(RAYWHITE, 0.13f);
+    Color fill = held ? Fade(RAYWHITE, 0.30f) : Fade(RAYWHITE, 0.08f);
     Vector2 c = { g_btn[b].x, g_btn[b].y };
     DrawCircleV(c, g_btn[b].r, fill);
-    DrawCircleLinesV(c, g_btn[b].r, Fade(RAYWHITE, 0.45f));
+    DrawCircleLinesV(c, g_btn[b].r, Fade(RAYWHITE, 0.30f));
     int fs = (int)(g_btn[b].r * (g_btn[b].label[1] == '\0' ? 0.9f : 0.34f));
     int tw = MeasureText(g_btn[b].label, fs);
     DrawText(g_btn[b].label, (int)c.x - tw / 2, (int)c.y - fs / 2, fs,
-             Fade(RAYWHITE, 0.9f));
+             Fade(RAYWHITE, 0.62f));
   }
 }

@@ -46,6 +46,16 @@ static void update_letterbox(void) {
   g_offset = (Vector2){ (sw - VIRT_W * g_scale) * 0.5f, (sh - VIRT_H * g_scale) * 0.5f };
 }
 
+// Same maths as update_letterbox, computed fresh and without side effects so
+// callers are not tied to where in the frame it last ran.
+Rectangle render_pitch_rect(void) {
+  float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
+  float sx = sw / (float)VIRT_W, sy = sh / (float)VIRT_H;
+  float sc = (sx < sy) ? sx : sy;
+  return (Rectangle){ (sw - VIRT_W * sc) * 0.5f, (sh - VIRT_H * sc) * 0.5f,
+                      VIRT_W * sc, VIRT_H * sc };
+}
+
 Vector2 render_to_virtual(Vector2 p) {
   return (Vector2){ (p.x - g_offset.x) / g_scale, (p.y - g_offset.y) / g_scale };
 }

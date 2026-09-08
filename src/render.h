@@ -26,6 +26,10 @@ void render_frame(const GameState *prev, const GameState *cur, float alpha);
 // Exports the 1280x720 virtual framebuffer, not the window. Used by OB_SHOT.
 void render_export_shot(const char *path);
 
+// Where the letterboxed pitch actually sits, in screen coordinates. Touch
+// controls use it to tell whether the side bars are wide enough to hold them.
+Rectangle render_pitch_rect(void);
+
 // Window/canvas pixel -> virtual pitch coordinate, accounting for letterboxing.
 Vector2 render_to_virtual(Vector2 screen_px);
 #endif // OB_RENDER_H
