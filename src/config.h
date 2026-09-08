@@ -50,8 +50,12 @@
 #define LEG_PIVOT_Y    FXI(0)       // pivot = head centre
 #define LEG_LEN        FXI(54)      // pivot -> foot centre. > HEAD_R, necessarily.
 #define FOOT_R         FXI(10)
-#define P_MOVE         FXF(5.0)     // px/frame. Arcade feel: velocity is SET, not accelerated
-#define P_JUMP         FXF(-11.5)
+#define P_MOVE         FXF(6.2)     // MEASURED: ~7 px/video-frame in the original, scaled
+// NOT measured: three attempts to track jump height from the video were
+// defeated by crowd animation and the goal-celebration overlay. Chosen instead
+// to give a ~150 px apex under the measured gravity, which is about what it
+// takes to head a ball at crossbar height. Treat as provisional.
+#define P_JUMP         FXF(-5.90)
 #define P_MAX_VY       FXF(22.0)
 #define SPAWN_X_P0     FXI(320)
 #define SPAWN_X_P1     FXI(960)
@@ -80,19 +84,23 @@
 // Arc per frame = LEG_LEN * angle; at LEG_LEN 54 the limit is 27.6 deg/frame,
 // so 24 leaves margin. Lengthening the leg REQUIRES lowering this.
 #define LEG_MAX_VEL    FXF(24.0)
-#define LEG_VEL_REF    LEG_MAX_VEL  // a full-speed snap is a full-power kick
+// Deliberately BELOW LEG_MAX_VEL and LEG_KICK_VEL. Damping knocks the swing to
+// 21.6 deg/frame on the very first frame and gravity eats more, so a reference
+// equal to the cap is unreachable and even a perfectly timed strike topped out
+// near 0.6 power. Setting it lower means a clean swing saturates at full power.
+#define LEG_VEL_REF    FXF(18.0)
 
 // --- ball ------------------------------------------------------------------
 #define BALL_R         FXI(16)
-#define BALL_SUBSTEPS  2            // anti-tunnelling. Part of the protocol contract.
-#define BALL_MAX_SPD   FXF(24.0)    // < BALL_R * BALL_SUBSTEPS, so it cannot pass a post
-#define E_GROUND       FXF(0.72)
+#define BALL_SUBSTEPS  3            // anti-tunnelling. Part of the protocol contract.
+#define BALL_MAX_SPD   FXF(30.0)    // per-substep travel must stay under BALL_R+POST_R (23)
+#define E_GROUND       FXF(0.65)    // MEASURED: 22 ground bounces, median 0.635
 #define E_WALL         FXF(0.80)
 #define E_HEAD         FXF(0.85)
 #define E_POST         FXF(0.65)
-#define BALL_DRAG_X    FXF(0.995)
+#define BALL_DRAG_X    FXF(0.998)   // MEASURED: horizontal retention 0.9978/frame
 #define BALL_FRIC_G    FXF(0.980)
-#define KICK_IMPULSE   FXF(15.0)    // at LEG_VEL_REF; scaled by actual swing speed
+#define KICK_IMPULSE   FXF(26.0)    // at LEG_VEL_REF; scaled by actual swing speed
 // A kick fires along a blend of the contact normal and the direction the foot
 // is actually SWINGING. The tangent is what lets you scoop: with the leg low
 // the foot travels forward-and-up, so getting under the ball lifts it, while a
@@ -101,7 +109,14 @@
 #define KICK_W_TANGENT FXF(0.55)
 
 // --- shared ----------------------------------------------------------------
-#define GRAVITY        FXF(0.55)    // px/frame^2
+// MEASURED from a capture of the original: 48 clean parabolic ball arcs give
+// 0.1312 px per video-frame^2, quartiles 0.1235-0.1377. Scaled to our 1280 px
+// pitch (their playfield is 1452 px) that is 0.116. The original also renders
+// at 30 Hz, not 60 - confirmed by 29 of 59 consecutive video frames being
+// identical - so anything taken from it in per-tick units needs converting.
+// Our old 0.55 was 4.8x too strong, which is why lofted balls slammed straight
+// back down and every scoop felt weak.
+#define GRAVITY        FXF(0.116)   // px/frame^2
 #define KICKOFF_FREEZE 60
 #define CELEBRATE_FRAMES (TICK_HZ * 2)
 #define MATCH_SECONDS  90

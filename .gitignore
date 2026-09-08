@@ -10,7 +10,11 @@ c.txt
 ref.txt
 
 # Local reference material for physics tuning. Never commit the original
-# game or its assets - see README.
+# game or its assets - see README. Gameplay captures of the original are used
+# to MEASURE physics constants; they are not ours to redistribute.
 reference/
+*.mp4
+*.mkv
+*.webm
 
 node_modules/
