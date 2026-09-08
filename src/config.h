@@ -43,12 +43,12 @@
 // the head circle and the leg is invisible exactly when it matters. That, plus
 // "the foot rests on the turf", fixes the head height:
 //   PLAYER_REST_Y = GROUND_Y - FOOT_R - LEG_LEN - LEG_PIVOT_Y
-// The hip sits LOW, near the bottom of the head, where the head circle is
-// narrow - so a forward swing sweeps clear of it instead of vanishing behind
-// the widest part. The renderer also draws the leg IN FRONT of the head.
+// The leg hangs from the CENTRE of the head and rotates about it like a
+// pendulum. LEG_LEN must therefore exceed HEAD_R, or the foot never emerges
+// from behind the head at any angle.
 #define HEAD_R         FXI(42)
-#define LEG_PIVOT_Y    FXI(28)      // hip, low on the head
-#define LEG_LEN        FXI(40)      // hip -> foot centre
+#define LEG_PIVOT_Y    FXI(0)       // pivot = head centre
+#define LEG_LEN        FXI(54)      // pivot -> foot centre. > HEAD_R, necessarily.
 #define FOOT_R         FXI(10)
 #define P_MOVE         FXF(5.0)     // px/frame. Arcade feel: velocity is SET, not accelerated
 #define P_JUMP         FXF(-11.5)
@@ -63,15 +63,23 @@
 #define LEG_REST       FXI(0)
 #define LEG_MAX_FWD    FXI(90)
 #define LEG_MAX_BACK   FXI(75)
-#define LEG_SWING_RATE FXF(9.0)     // deg/frame while the button is held
-#define LEG_RETURN_RATE FXF(6.0)    // deg/frame drifting back to rest
-#define LEG_SPRING     FXF(0.55)    // windup angle -> release angular velocity
-// Cap on the snap-back speed. The foot only moves BETWEEN frames while the ball
-// is tested within them, so an uncapped spring (49.5 deg/frame at a full cock =
-// 34 px of arc) can sweep straight past the ball and register no contact. At 28
-// deg/frame the foot travels ~19.5 px per frame against a 26 px combined
-// foot+ball radius, which cannot tunnel.
-#define LEG_MAX_VEL    FXF(28.0)
+// The leg is a real pendulum: a restoring acceleration proportional to
+// sin(angle) pulls it back toward hanging, so it accelerates through the bottom
+// of the arc and decelerates at the extremes. Pressing kick is an angular
+// impulse; holding applies a sustained torque that keeps the leg up.
+#define LEG_GRAVITY    FXF(3.0)     // restoring accel, deg/frame^2, times sin(angle)
+#define LEG_DAMP       FXF(0.90)    // per-frame velocity damping, so it settles
+#define LEG_KICK_VEL   FXF(24.0)    // angular impulse imparted by a press
+#define LEG_HOLD_TORQUE FXF(4.0)    // must exceed LEG_GRAVITY to hold the leg raised
+#define LEG_SETTLE_A   FXF(4.0)     // below this angle AND speed, snap to rest
+#define LEG_SETTLE_V   FXF(2.0)
+// Cap on the swing speed, and it is a correctness constraint rather than a feel
+// one. The foot moves only BETWEEN frames while the ball is tested within them,
+// so if the foot sweeps further than the combined foot+ball radius in one frame
+// it can pass clean through the ball and register no contact - a silent whiff.
+// Arc per frame = LEG_LEN * angle; at LEG_LEN 54 the limit is 27.6 deg/frame,
+// so 24 leaves margin. Lengthening the leg REQUIRES lowering this.
+#define LEG_MAX_VEL    FXF(24.0)
 #define LEG_VEL_REF    LEG_MAX_VEL  // a full-speed snap is a full-power kick
 
 // --- ball ------------------------------------------------------------------

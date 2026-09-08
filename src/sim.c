@@ -125,41 +125,61 @@ void sim_foot(const Player *p, fx *out_x, fx *out_y) {
   *out_y = sim_hip_y(p) + fx_mul(LEG_LEN, c);
 }
 
-// Pressing kick FIRES the leg forward and up - that sweep is the strike. It
-// holds at full extension while the button is down, then drifts back to rest on
-// release.
+// The leg SWINGS like a pendulum hung from the centre of the head.
 //
-// The direction is not a style choice, it falls out of the geometry: with the
-// foot at (dir*L*sin t, L*cos t) and y pointing down, a RISING leg (t
-// increasing) moves the foot forward and up, while a descending one moves it
-// backward and down. Only the upswing can kick a ball forward; the downswing is
-// a stomp. An earlier build had the release snap downward and every kick drove
-// the ball into the turf at a third of the intended power.
+// Pressing kick is an angular impulse; holding applies a torque that keeps the
+// leg raised; releasing lets gravity carry it back down, overshooting past
+// hanging and settling after a swing or two. Angular acceleration is
+// -LEG_GRAVITY * sin(angle), which is what makes it accelerate through the
+// bottom of the arc and stall at the extremes instead of sweeping at a robotic
+// constant rate.
+//
+// Swing direction is not a style choice, it falls out of the geometry: with the
+// foot at (dir*L*sin t, L*cos t) and y pointing down, a RISING leg moves the
+// foot forward and up, while a falling one moves it backward and down. Only the
+// upswing can strike a ball forward - an earlier build had the leg strike on the
+// way down and every kick drove the ball into the turf.
 static void leg_update(Player *p, int kick) {
-  int press = (kick && !p->kick_held);
+  if (kick && !p->kick_held) p->leg_vel += LEG_KICK_VEL;   // press = the strike
 
-  if (press && p->leg <= LEG_REST) {
-    p->leg_vel = LEG_MAX_VEL;          // fire
+  if (kick && p->leg >= LEG_MAX_FWD) {
+    // Held at full extension: LOCK it. Letting gravity act here and re-applying
+    // torque next frame makes the leg buzz between 87 and 90 degrees.
+    p->leg = LEG_MAX_FWD;
+    p->leg_vel = 0;
+  } else if (kick) {
+    p->leg_vel += LEG_HOLD_TORQUE;        // held: drive it up
+  } else {
+    // Free: gravity restores it toward hanging.
+    p->leg_vel -= fx_mul(LEG_GRAVITY, fx_sin_deg(p->leg));
   }
 
-  if (p->leg_vel > 0) {
-    p->leg += p->leg_vel;
-    if (p->leg >= LEG_MAX_FWD) { p->leg = LEG_MAX_FWD; p->leg_vel = 0; }
-  } else if (!kick && p->leg > LEG_REST) {
-    // Released: the leg simply falls back to rest. Harmless - leg_vel stays 0,
-    // so a returning leg carries no kick power.
-    p->leg -= LEG_RETURN_RATE;
-    if (p->leg < LEG_REST) p->leg = LEG_REST;
+  p->leg_vel = fx_mul(p->leg_vel, LEG_DAMP);
+  // The cap is an anti-tunnelling constraint, not a feel knob - see LEG_MAX_VEL.
+  if (p->leg_vel >  LEG_MAX_VEL) p->leg_vel =  LEG_MAX_VEL;
+  if (p->leg_vel < -LEG_MAX_VEL) p->leg_vel = -LEG_MAX_VEL;
+
+  p->leg += p->leg_vel;
+
+  if (p->leg >  LEG_MAX_FWD)  { p->leg =  LEG_MAX_FWD;  if (p->leg_vel > 0) p->leg_vel = 0; }
+  if (p->leg < -LEG_MAX_BACK) { p->leg = -LEG_MAX_BACK; if (p->leg_vel < 0) p->leg_vel = 0; }
+
+  // Settle exactly, or it jitters around rest forever and the state never
+  // stops changing - which would also mean the checksum never stabilises.
+  if (!kick && fx_abs(p->leg) < LEG_SETTLE_A && fx_abs(p->leg_vel) < LEG_SETTLE_V) {
+    p->leg = LEG_REST;
+    p->leg_vel = 0;
   }
 
   p->kick_held = (uint8_t)(kick ? 1 : 0);
 }
 
-// How fast the foot is travelling, as Q16.16 in 0..1. Only ever non-zero on the
-// upswing, which is the only part of the arc that can strike the ball forward.
+// How fast the foot is travelling, as Q16.16 in 0..1. A backswing carries power
+// too - it just carries the ball the other way, which the tangent handles.
 static fx leg_power(const Player *p) {
-  if (p->leg_vel <= 0) return 0;
-  fx q = fx_div(p->leg_vel, LEG_VEL_REF);
+  fx w = fx_abs(p->leg_vel);
+  if (w <= 0) return 0;
+  fx q = fx_div(w, LEG_VEL_REF);
   return (q > FX_ONE) ? FX_ONE : q;
 }
 
@@ -289,6 +309,7 @@ static void ball_vs_player(GameState *s, Player *p) {
       fx cs  = fx_cos_deg(p->leg), sn = fx_sin_deg(p->leg);
       fx tgx = p->facing ? cs : -cs;
       fx tgy = -sn;
+      if (p->leg_vel < 0) { tgx = -tgx; tgy = -tgy; }   // falling: foot goes back
 
       fx bx = fx_mul(nx, KICK_W_NORMAL) + fx_mul(tgx, KICK_W_TANGENT);
       fx by = fx_mul(ny, KICK_W_NORMAL) + fx_mul(tgy, KICK_W_TANGENT);
