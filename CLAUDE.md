@@ -131,6 +131,11 @@ goal-celebration overlay) and **kick impulse**. Do not present either as derived
 - **raylib's `GetFPS()` is unreliable read once before exit** - it reported 1800 on a
   60 Hz display and sent me hunting a vsync fault that did not exist. Measure
   sustained wall-clock rate instead.
+- **Directional controls go on the axis they control.** LEFT and RIGHT are a
+  horizontal pair and are never stacked, even when stacking would fit a layout
+  neatly. Stacking them made "up" mean "left", which forces a mental translation
+  on every input. KICK and JUMP carry no direction, so they are free to be placed
+  wherever there is room - that asymmetry is what the layout exploits.
 - **Touch controls are sized in SCREEN space, never virtual pitch space.** In virtual
   space they shrink with the letterbox: a landscape phone scales the pitch by ~0.54,
   turning a 56 px button into ~30 physical px against a ~48 px minimum target. They

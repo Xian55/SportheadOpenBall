@@ -31,6 +31,16 @@ void touch_init(void) {
 }
 
 // Rebuilt every frame: the window (or phone orientation) can change at any time.
+//
+// LEFT and RIGHT are laid out HORIZONTALLY, always, and never stacked. A
+// directional control has to sit on the axis it controls - stacking left above
+// right forces the player to translate "up means left" on every single input,
+// which is exactly as bad as it sounds. An earlier version stacked them to fit
+// the letterbox bar; fitting nicely is not worth that.
+//
+// KICK and JUMP carry no direction, so they are free to go wherever there is
+// room. When the letterbox leaves a wide enough bar down the right-hand side
+// they go THERE, stacked, which keeps them off the right goalmouth entirely.
 static void layout(void) {
   float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
   // ~13% of screen height, floored at 46 px so it stays thumb-sized on small
@@ -39,28 +49,23 @@ static void layout(void) {
   if (r < 46.0f) r = 46.0f;
   if (r > 92.0f) r = 92.0f;
   float m = r * 0.55f;                 // margin from the screen edges
+  float y = sh - r - m;
 
-  // If the letterbox leaves a wide enough bar down each side - which a tall
-  // phone (20:9, 19.5:9) does - put the controls THERE. They then cover no
-  // pitch at all. On 16:9, or on a small viewport where the bar is too narrow,
-  // fall back to the bottom corners and accept overlapping the goalmouths;
-  // shrinking the pitch to make room costs more than it buys on a small screen.
+  // Movement: a horizontal pair hard against the left edge, so it uses whatever
+  // letterbox bar exists there before spilling over the pitch.
+  g_btn[0] = (TouchBtn){ m + r,          y, r, IN_LEFT,  "<" };
+  g_btn[1] = (TouchBtn){ m + r * 3.2f,   y, r, IN_RIGHT, ">" };
+
   Rectangle pr = render_pitch_rect();
   if (pr.x >= r * 2.1f) {
-    float lx = pr.x * 0.5f, rx = sw - pr.x * 0.5f;
-    float y0 = sh * 0.5f - r * 1.15f, y1 = sh * 0.5f + r * 1.15f;
-    g_btn[0] = (TouchBtn){ lx, y0, r, IN_LEFT,  "<"    };
-    g_btn[1] = (TouchBtn){ lx, y1, r, IN_RIGHT, ">"    };
-    g_btn[2] = (TouchBtn){ rx, y0, r, IN_KICK,  "KICK" };
-    g_btn[3] = (TouchBtn){ rx, y1, r, IN_JUMP,  "JUMP" };
-    return;
+    // Right bar is wide enough: park the action buttons in it, clear of play.
+    float rx = sw - pr.x * 0.5f;
+    g_btn[2] = (TouchBtn){ rx, sh * 0.5f - r * 1.15f, r, IN_KICK, "KICK" };
+    g_btn[3] = (TouchBtn){ rx, sh * 0.5f + r * 1.15f, r, IN_JUMP, "JUMP" };
+  } else {
+    g_btn[2] = (TouchBtn){ sw - m - r * 3.2f, y, r, IN_KICK, "KICK" };
+    g_btn[3] = (TouchBtn){ sw - m - r,        y, r, IN_JUMP, "JUMP" };
   }
-
-  float y = sh - r - m;
-  g_btn[0] = (TouchBtn){ m + r,                 y, r, IN_LEFT,  "<"    };
-  g_btn[1] = (TouchBtn){ m + r * 3.3f,          y, r, IN_RIGHT, ">"    };
-  g_btn[2] = (TouchBtn){ sw - m - r * 3.3f,     y, r, IN_KICK,  "KICK" };
-  g_btn[3] = (TouchBtn){ sw - m - r,            y, r, IN_JUMP,  "JUMP" };
 }
 
 static uint8_t hit(float x, float y) {
