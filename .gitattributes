@@ -2,6 +2,10 @@
 # errors) - keep them CRLF no matter the checkout platform.
 *.cmd text eol=crlf
 
+# Mirror image: a shell script with CRLF dies on Linux with
+# "bad interpreter: /usr/bin/env bash^M". tools/lint_sim.sh runs in CI.
+*.sh  text eol=lf
+
 * text=auto
 *.c    text
 *.h    text
