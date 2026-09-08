@@ -84,6 +84,31 @@ connection failed") and never show an infinite spinner.
 
 ## Gotchas learned the hard way
 
+- **`height: 100vh` clips the bottom of the canvas on mobile.** vh measures the
+  viewport as though the URL bar were hidden, so the canvas is taller than what is
+  on screen and its bottom - pitch floor and the whole touch control row - slides
+  off. Use `100dvh` with `100vh` kept first as a fallback. Desktop CANNOT test
+  this: with no URL bar to hide the two are identical.
+- **Touch controls are sized in SCREEN space, never virtual pitch space.** They
+  used to live in the 1280x720 virtual space inside the render texture, so they
+  shrank with the letterbox: a 56 px button became ~30 px on a landscape phone,
+  against a ~48 px minimum touch target - smallest exactly where it must be
+  biggest. They are now laid out and drawn after the blit, at 13% of screen
+  height. Unresolved: in landscape the pitch fills the height, so the letterbox
+  bars are at the sides and the controls necessarily overlay the goalmouths.
+- **The mobile browser will steal input unless told not to.** `touch-action: none`
+  (a drag scrolled/zoomed the page), `overscroll-behavior: none` (pull-to-refresh
+  on a downward swipe), `user-scalable=no` (pinch-zoom fought the controls).
+- **raylib's `GetFPS()` read once before exit is meaningless.** It reported 1800 on
+  a 60 Hz display and sent a whole investigation chasing a vsync fault that did
+  not exist; sustained wall-clock rate was exactly 60.0. Measure frames over
+  elapsed time instead.
+- **Render MUST interpolate between sim ticks.** The sim is fixed 60 Hz while the
+  display runs at its own rate and `GetFrameTime()` drifts either side of 1/60, so
+  the accumulator lands 0 steps on one frame and 2 on the next. Everything freezes
+  then jumps double, which reads as tearing. `render_frame(prev, cur, alpha)`
+  draws a display-only interpolated copy; large jumps snap so a kickoff reset does
+  not smear the ball across the pitch.
 - **Windows display scaling breaks raylib's framebuffer assumptions.** At 125% a 1280x720
   window got a 1600x900 framebuffer; GL's bottom-left origin then put the scene in the
   corner. Everything now draws into a 1280x720 `RenderTexture` blitted letterboxed, and
@@ -107,6 +132,32 @@ connection failed") and never show an infinite spinner.
 - GitHub Pages sends no COOP/COEP headers, so no `SharedArrayBuffer` and no pthreads.
   Never add `-pthread`. The build must stay single-threaded (it costs nothing — the sim
   is integer math and a 12-frame resim is microseconds).
+
+## Physics constants come from MEASUREMENT, not memory
+
+The gameplay constants were fitted from a screen capture of the original using
+ffmpeg + numpy: track the ball by motion and brightness, fit parabolas to its
+free-flight arcs. Anything derived this way is marked `MEASURED` in `config.h`
+with its sample count; anything not is marked as provisional. Keep that habit -
+guessed constants cost several rounds of rework before this.
+
+Two findings that govern any future measurement:
+
+- **The original renders at 30 Hz, not 60.** Confirmed by 29 of 59 consecutive
+  video frames being byte-identical, with even/odd frame deltas differing 6.7x.
+  Nothing from it can be copied per-tick into our 60 Hz sim without converting:
+  velocities halve, accelerations quarter.
+- **Scale factor is 0.882** - their playfield is 1452 px wide against our 1280.
+
+The big catch was gravity: ours was **4.8x too strong**, which is why lofted balls
+slammed back down and a perfectly timed scoop felt weak.
+
+Still unmeasured, and flagged in `config.h`: **jump height** (three tracking
+attempts were defeated by the animated crowd and the goal-celebration overlay -
+one claimed a 573 px jump with 3.3 s hang, plainly wrong) and **kick impulse**.
+
+Captures of the original are gitignored (`*.mp4`). They are used to measure
+behaviour; they are not ours to redistribute.
 
 ## Rejected alternatives (with the reason, so they stay rejected)
 
@@ -153,7 +204,9 @@ Landing with the netcode: `OB_ROOM`, `OB_NETSTAT`, `OB_LAG_MS`, `OB_JITTER_MS`, 
 ## Milestones
 
 - **M0 done** — skeleton, both platforms building, Pages deploying, virtual-res renderer.
-- **M1** — fixed-point sim + local hotseat 2P + touch input. Goes straight to fixed point.
+- **M1 done** — fixed-point sim, head-and-leg players with a pendulum leg, ball
+  physics, goals, clock and phases, keyboard hotseat + touch, physics fitted from
+  a capture of the original, render interpolation, mobile canvas sizing.
 - **M2** — determinism harness: `fixed_test`, `const_test`, golden replay diffed
   native-vs-wasm-under-node. That diff is the real gate; everything else is prevention.
 - **M3** — rollback over UDP loopback with injected lag/jitter/loss; `rollback_test`
