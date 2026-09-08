@@ -131,11 +131,19 @@ goal-celebration overlay) and **kick impulse**. Do not present either as derived
 - **raylib's `GetFPS()` is unreliable read once before exit** - it reported 1800 on a
   60 Hz display and sent me hunting a vsync fault that did not exist. Measure
   sustained wall-clock rate instead.
+- **Input FEEL settings are local; they never go in `config.h`.** Constants there
+  are protocol - hashed into the const golden, and both peers must agree on them.
+  Stick deadzone and the like shape which input BITS a device produces, never how
+  the sim reads them, so they live in `touch.c` and two players can run different
+  settings and stay in sync. Putting one in `config.h` would quietly turn a
+  comfort setting into a desync source.
 - **Directional controls go on the axis they control.** LEFT and RIGHT are a
   horizontal pair and are never stacked, even when stacking would fit a layout
   neatly. Stacking them made "up" mean "left", which forces a mental translation
   on every input. KICK and JUMP carry no direction, so they are free to be placed
-  wherever there is room - that asymmetry is what the layout exploits.
+  wherever there is room - that asymmetry is what the layout exploits. Movement
+  is now a floating stick rather than discrete arrows, which sidesteps the axis
+  problem entirely by BEING the axis, and folds jump into pushing up.
 - **Touch controls are sized in SCREEN space, never virtual pitch space.** In virtual
   space they shrink with the letterbox: a landscape phone scales the pitch by ~0.54,
   turning a 56 px button into ~30 physical px against a ~48 px minimum target. They
