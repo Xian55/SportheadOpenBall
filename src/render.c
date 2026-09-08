@@ -174,7 +174,37 @@ static void draw_scene(const GameState *s) {
   touch_draw();
 }
 
-void render_frame(const GameState *s) {
+// Interpolate a position between ticks. A large jump means a teleport - kickoff
+// reset, goal reset - and must SNAP, or the ball smears across the pitch.
+static fx lerp_fx(fx a, fx b, float t) {
+  if (fx_abs(b - a) > FXI(240)) return b;
+  return a + (fx)((float)(b - a) * t);
+}
+
+// Ball spin wraps at 360, so interpolate the shortest way round.
+static fx lerp_ang(fx a, fx b, float t) {
+  fx d = b - a;
+  while (d >  FXI(180)) d -= FXI(360);
+  while (d < -FXI(180)) d += FXI(360);
+  return a + (fx)((float)d * t);
+}
+
+void render_frame(const GameState *prev, const GameState *cur, float alpha) {
+  if (alpha < 0.0f) alpha = 0.0f;
+  if (alpha > 1.0f) alpha = 1.0f;
+
+  // A display-only copy. The sim state itself is never touched here.
+  GameState v = *cur;
+  for (int i = 0; i < 2; i++) {
+    v.p[i].x   = lerp_fx(prev->p[i].x,   cur->p[i].x,   alpha);
+    v.p[i].y   = lerp_fx(prev->p[i].y,   cur->p[i].y,   alpha);
+    v.p[i].leg = lerp_fx(prev->p[i].leg, cur->p[i].leg, alpha);
+  }
+  v.ball_x    = lerp_fx (prev->ball_x,    cur->ball_x,    alpha);
+  v.ball_y    = lerp_fx (prev->ball_y,    cur->ball_y,    alpha);
+  v.ball_spin = lerp_ang(prev->ball_spin, cur->ball_spin, alpha);
+  const GameState *s = &v;
+
   BeginTextureMode(g_target);
     draw_scene(s);
   EndTextureMode();

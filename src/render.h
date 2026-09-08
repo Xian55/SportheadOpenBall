@@ -17,7 +17,11 @@
 
 void render_init(void);
 void render_shutdown(void);
-void render_frame(const GameState *s);          // draws AND presents the frame
+// Draws AND presents. `prev` is the state one tick before `cur`, and alpha is
+// how far between them the display currently sits. The sim ticks at a fixed
+// 60 Hz while the display runs at its own rate, so without this the accumulator
+// lands 0 steps on one frame and 2 on the next and everything visibly stutters.
+void render_frame(const GameState *prev, const GameState *cur, float alpha);
 
 // Exports the 1280x720 virtual framebuffer, not the window. Used by OB_SHOT.
 void render_export_shot(const char *path);

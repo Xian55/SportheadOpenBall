@@ -26,11 +26,13 @@
 #define MAX_CATCHUP 4       // sim ticks per rendered frame, hard cap
 
 static GameState g_state;
+static GameState g_prev;    // state one tick back, for render interpolation
 static uint32_t  g_seed      = 0x5eed1234u;
 static int       g_shot_frame = -1;   // OB_SHOT=N: screenshot at frame N, then exit 0
 static int       g_frames     = 0;
 static double    g_acc        = 0.0;
 static uint8_t   g_force_in[2] = { 0, 0 };  // OB_IN0 / OB_IN1 debug hook
+static double    g_t0 = 0.0;
 
 #ifdef __EMSCRIPTEN__
 // raylib's web backend resizes the canvas behind GLFW's back, so every mouse
@@ -55,6 +57,7 @@ static void frame(void) {
 
   if (g_state.phase == PH_OVER && IsKeyPressed(KEY_R)) {
     sim_init(&g_state, g_seed);
+  g_prev = g_state;
     input_clear();
     g_acc = 0.0;
   }
@@ -71,6 +74,7 @@ static void frame(void) {
     g_acc -= TICK_DT;
     const uint8_t in[2] = { (uint8_t)(input_consume(0) | g_force_in[0]),
                             (uint8_t)(input_consume(1) | g_force_in[1]) };
+    g_prev = g_state;
     sim_step(&g_state, in);
     steps++;
   }
@@ -78,16 +82,23 @@ static void frame(void) {
   // hitch cannot snowball into the spiral of death.
   if (steps == MAX_CATCHUP) g_acc = 0.0;
 
-  render_frame(&g_state);
+  // Whatever time is left over in the accumulator is how far past the last tick
+  // the display is; render between the two states rather than snapping to one.
+  render_frame(&g_prev, &g_state, (float)(g_acc / TICK_DT));
 
   g_frames++;
   if (g_shot_frame >= 0 && g_frames >= g_shot_frame) {
     // Exports the 1280x720 VIRTUAL framebuffer, not the window, so the output
     // is identical regardless of Windows display scaling or canvas size.
     // Lands in the LAUNCH cwd: raylib caches the working directory at InitWindow.
-    printf("DIAG screen=%dx%d render=%dx%d scale=%.3f\n",
+    // NOTE: GetFPS() is unreliable when read once just before exit - it reported
+    // 1800 on a 60 Hz display and sent me chasing a vsync bug that did not exist.
+    // The sustained figure below is wall-clock and is the one to trust.
+    printf("DIAG monitor=%dHz fps=%d screen=%dx%d render=%dx%d frametime=%.4f\n",
+           GetMonitorRefreshRate(GetCurrentMonitor()),
+           (int)(g_frames / (GetTime() - g_t0)),
            GetScreenWidth(), GetScreenHeight(), GetRenderWidth(), GetRenderHeight(),
-           (double)GetWindowScaleDPI().x);
+           (double)GetFrameTime());
     render_export_shot("openball_shot.png");
     // Also capture the real WINDOW framebuffer: the virtual export cannot show
     // a presentation bug, which is exactly how an oversized blit slipped past.
@@ -121,9 +132,11 @@ int main(void) {
   InitWindow(1280, 720, "SportheadOpenBall " OB_VERSION);
   SetTargetFPS(60);
 
+  g_t0 = GetTime();
   render_init();
   touch_init();
   sim_init(&g_state, g_seed);
+  g_prev = g_state;
 
 #ifdef __EMSCRIPTEN__
   // fps 0 = requestAnimationFrame. Never pass a fixed fps here: that path uses
