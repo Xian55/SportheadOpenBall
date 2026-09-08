@@ -18,8 +18,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: actions/checkout@v7
+      - uses: mymindstorm/setup-emsdk@v16
         with:
           version: latest
       - name: Build wasm
@@ -36,8 +36,8 @@ jobs:
           cp ../build-web/index.html ../build-web/index.js ../build-web/index.wasm _site/
           # The vendored signalling bundle ships alongside (added in M4).
           [ -f web/trystero-nostr.min.js ] && cp web/trystero-nostr.min.js _site/ || true
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -49,4 +49,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
