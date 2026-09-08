@@ -20,7 +20,11 @@
 // The stick FLOATS: it centres wherever the thumb first lands in the left half,
 // rather than sitting at a fixed spot the player must find without looking.
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include "raylib.h"
 #include "touch.h"
 #include "config.h"
@@ -62,12 +66,32 @@ static float g_home_x, g_home_y;
 
 static float g_kick_x, g_kick_y, g_kick_r;
 
+// --- on-device diagnostics --------------------------------------------------
+// Enable with ?dbg=1 in the URL, or OB_TOUCHDBG=1 natively. Prints exactly what
+// raylib reports, because reasoning about the web touch path from its source has
+// twice produced a confident wrong answer.
+static int g_dbg;
+#ifdef __EMSCRIPTEN__
+EM_JS(int, ob_url_has_dbg, (void), {
+  try { return (new URLSearchParams(location.search)).has("dbg") ? 1 : 0; }
+  catch (e) { return 0; }
+});
+#endif
+static int dbg_enabled(void) {
+#ifdef __EMSCRIPTEN__
+  return ob_url_has_dbg();
+#else
+  return getenv("OB_TOUCHDBG") != NULL;
+#endif
+}
+
 void touch_init(void) {
   g_mask = 0;
   g_stick_id = -1;
   g_deadzone  = env_f("OB_DEADZONE", 0.30f, 0.02f, 0.80f);
   g_jumpzone  = env_f("OB_JUMPZONE", 1.25f, 0.50f, 4.00f);
   g_stick_mul = env_f("OB_STICKR",   1.35f, 0.60f, 3.00f);
+  g_dbg = dbg_enabled();
   // Lets the overlay be exercised on a desktop box without a touchscreen.
   g_active = (getenv("OB_TOUCH") != NULL);
 }
@@ -206,6 +230,32 @@ void touch_draw(void) {
   DrawLineEx((Vector2){ g_bx, g_by - br * 0.78f }, (Vector2){ g_bx, g_by - br * 0.46f }, 3.0f, tick);
 
   DrawCircleV((Vector2){ g_kx, g_ky }, br * 0.46f, Fade(RAYWHITE, engaged ? 0.42f : 0.18f));
+
+  if (g_dbg) {
+    int n = GetTouchPointCount();
+    int y = 6, fs = 18;
+    DrawRectangle(0, 0, GetScreenWidth(), 6 + fs * (5 + (n > 4 ? 4 : n)), Fade(BLACK, 0.65f));
+    DrawText(TextFormat("touchCount=%d  mouseDown=%d  mouse=%.0f,%.0f", n,
+                        IsMouseButtonDown(MOUSE_BUTTON_LEFT) ? 1 : 0,
+                        (double)GetMousePosition().x, (double)GetMousePosition().y),
+             6, y, fs, YELLOW); y += fs;
+    for (int i = 0; i < n && i < 4; i++) {
+      Vector2 p = GetTouchPosition(i);
+      DrawText(TextFormat("  t%d id=%d  %.0f,%.0f", i, GetTouchPointId(i),
+                          (double)p.x, (double)p.y), 6, y, fs, YELLOW);
+      y += fs;
+    }
+    DrawText(TextFormat("stickId=%d base=%.0f,%.0f knob=%.0f,%.0f",
+                        g_stick_id, (double)g_bx, (double)g_by,
+                        (double)g_kx, (double)g_ky), 6, y, fs, SKYBLUE); y += fs;
+    DrawText(TextFormat("mask=%c%c%c%c  (L R J K)",
+                        (g_mask & IN_LEFT)  ? 'L' : '.',
+                        (g_mask & IN_RIGHT) ? 'R' : '.',
+                        (g_mask & IN_JUMP)  ? 'J' : '.',
+                        (g_mask & IN_KICK)  ? 'K' : '.'), 6, y, fs, LIME); y += fs;
+    DrawText(TextFormat("screen=%dx%d  render=%dx%d", GetScreenWidth(), GetScreenHeight(),
+                        GetRenderWidth(), GetRenderHeight()), 6, y, fs, GRAY);
+  }
 
   int held = (g_mask & IN_KICK) != 0;
   DrawCircleV((Vector2){ g_kick_x, g_kick_y }, g_kick_r, Fade(RAYWHITE, held ? 0.30f : 0.08f));
