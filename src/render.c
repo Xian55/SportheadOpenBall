@@ -171,7 +171,6 @@ static void draw_scene(const GameState *s) {
   draw_ball(s);
   draw_hud(s);
   draw_banner(s);
-  touch_draw();
 }
 
 // Interpolate a position between ticks. A large jump means a teleport - kickoff
@@ -218,5 +217,8 @@ void render_frame(const GameState *prev, const GameState *cur, float alpha) {
                    (Rectangle){ g_offset.x, g_offset.y,
                                 VIRT_W * g_scale, VIRT_H * g_scale },
                    (Vector2){ 0, 0 }, 0.0f, WHITE);
+    // Touch controls go here, in SCREEN space and outside the render texture,
+    // so they keep a usable physical size instead of shrinking with the pitch.
+    touch_draw();
   EndDrawing();
 }

@@ -133,6 +133,11 @@ int main(void) {
   SetTargetFPS(60);
 
   g_t0 = GetTime();
+  // OB_WINSIZE=WxH resizes the window at startup, so phone-shaped layouts can
+  // be verified on a desktop without a device.
+  const char *ws = getenv("OB_WINSIZE");
+  if (ws) { int w=0,h=0; if (sscanf(ws, "%dx%d", &w, &h) == 2 && w > 160 && h > 120) SetWindowSize(w, h); }
+
   render_init();
   touch_init();
   sim_init(&g_state, g_seed);
