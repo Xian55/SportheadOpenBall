@@ -2,6 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- The HTML is the root of the cache chain: if it is stale it hands out the
+       old ?v= and the js and wasm stay stale too. GitHub Pages will not let us
+       set real headers, so these are best-effort; the visible build id in the
+       corner is the actual safety net. -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <!-- viewport-fit=cover so the canvas reaches under a notch / rounded corners.
        user-scalable=no: pinch-zoom on a game canvas is never wanted and it
        fights the touch controls. -->
@@ -43,9 +50,20 @@
   <div id="status">Loading…</div>
   <canvas class="emscripten" id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
   <script>
+    // Stamped by the Pages workflow with the commit SHA. Browsers cache the
+    // wasm and js aggressively, and a stale build is indistinguishable from a
+    // fix that did not work - that has already cost one debugging round.
+    window.OB_BUILD = '__OB_BUILD__';
+
     var Module = {
       canvas: (function () { return document.getElementById('canvas'); })(),
       setStatus: function (t) { document.getElementById('status').textContent = t || ''; },
+      // Version the .wasm request too: the js loader fetches it by name, so
+      // busting only the script tag would still serve a stale binary.
+      locateFile: function (path, prefix) {
+        var v = window.OB_BUILD || '';
+        return prefix + path + (v && /\.(wasm|data)$/.test(path) ? ('?v=' + v) : '');
+      },
     };
 
     // Space and the arrow keys SCROLL THE PAGE - and the parent frame when

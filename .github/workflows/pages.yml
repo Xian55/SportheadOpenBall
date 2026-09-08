@@ -34,6 +34,13 @@ jobs:
         run: |
           mkdir -p _site
           cp ../build-web/index.html ../build-web/index.js ../build-web/index.wasm _site/
+          # Cache-bust: stamp the build id and version the js request. Without
+          # this a phone happily serves a cached build for ages, and a stale page
+          # looks exactly like a fix that did not work.
+          SHA="${GITHUB_SHA::7}"
+          sed -i "s/__OB_BUILD__/$SHA/g" _site/index.html
+          sed -i "s#src=\"index.js\"#src=\"index.js?v=$SHA\"#g" _site/index.html
+          grep -o "index.js?v=[a-f0-9]*" _site/index.html | head -1 || echo "WARNING: script tag not versioned"
           # The vendored signalling bundle ships alongside (added in M4).
           [ -f web/trystero-nostr.min.js ] && cp web/trystero-nostr.min.js _site/ || true
       - uses: actions/configure-pages@v6

@@ -112,7 +112,19 @@ static void draw_player(const Player *p, Color c, int seat) {
   (void)seat;
 }
 
+#ifndef OB_VERSION
+#define OB_VERSION "dev"
+#endif
+
 static void draw_hud(const GameState *s) {
+  // Which build is actually running, always on screen. Browsers cache the wasm
+  // hard, and a stale build is indistinguishable from a fix that did not work -
+  // that cost a full debugging round once. Now it is visible in any screenshot.
+  {
+    const char *v = OB_VERSION;
+    int fs = 14, tw = MeasureText(v, fs);
+    DrawText(v, (int)FW - tw - 8, (int)FX2F(FIELD_H) - fs - 6, fs, Fade(RAYWHITE, 0.35f));
+  }
   int secs = (int)(s->clock / TICK_HZ);
   const char *score = TextFormat("%d  -  %d", s->score[0], s->score[1]);
   const char *clock = TextFormat("%d:%02d", secs / 60, secs % 60);
