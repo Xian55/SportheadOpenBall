@@ -1,0 +1,16 @@
+# Build artifacts normally live out of tree (..\SportheadOpenBall_build),
+# but just in case.
+build/
+
+# Screenshot hook output (OB_SHOT), written to the launch cwd
+openball_shot.png
+
+# Determinism-gate scratch output
+c.txt
+ref.txt
+
+# Local reference material for physics tuning. Never commit the original
+# game or its assets - see README.
+reference/
+
+node_modules/

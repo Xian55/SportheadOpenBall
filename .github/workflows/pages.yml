@@ -1,0 +1,52 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+      - name: Build wasm
+        run: |
+          emcmake cmake -S . -B ../build-web -DCMAKE_BUILD_TYPE=Release \
+                        -DPLATFORM=Web -DOB_DEV_TOOLS=OFF \
+                        -DOB_VERSION="${GITHUB_SHA::7}"
+          cmake --build ../build-web -j"$(nproc)"
+      - name: Stage site
+        # CMake already names the target `index`, so Pages serves the game at
+        # the site root with no rename and no redirect.
+        run: |
+          mkdir -p _site
+          cp ../build-web/index.html ../build-web/index.js ../build-web/index.wasm _site/
+          # The vendored signalling bundle ships alongside (added in M4).
+          [ -f web/trystero-nostr.min.js ] && cp web/trystero-nostr.min.js _site/ || true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
