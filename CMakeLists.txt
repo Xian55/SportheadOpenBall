@@ -44,6 +44,8 @@ target_compile_options(ob_sim PRIVATE
 add_executable(openball
   src/main.c
   src/render.c
+  src/input.c
+  src/touch.c
   $<TARGET_OBJECTS:ob_sim>)
 target_include_directories(openball PRIVATE src)
 target_link_libraries(openball raylib)

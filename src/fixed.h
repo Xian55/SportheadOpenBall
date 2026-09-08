@@ -11,10 +11,12 @@
 #include <stdint.h>
 
 typedef int32_t fx;   // Q16.16: range +-32767.99998, resolution 1/65536
+typedef int64_t fx2;  // Q32.32: squared / intermediate values. NEVER narrow to fx.
 
 #define FX_SHIFT 16
 #define FX_ONE   ((fx)65536)
 #define FX_HALF  ((fx)32768)
+#define FX_ZERO  ((fx)0)
 
 // Integer -> fx. |n| must stay under 32767 or this overflows silently.
 #define FXI(n)  ((fx)((int32_t)(n) * FX_ONE))
@@ -48,7 +50,7 @@ static inline fx fx_clamp(fx v, fx lo, fx hi) { return v < lo ? lo : (v > hi ? h
 // 400000x past INT32_MAX. Worst-case fx_d2 is ~1.4e16 against an INT64_MAX of
 // 9.2e18 - about 650x headroom. Compare fx2 against fx2; do not take roots to
 // decide whether something overlaps.
-static inline int64_t fx_d2(fx dx, fx dy) { return (int64_t)dx * dx + (int64_t)dy * dy; }
+static inline fx2 fx_d2(fx dx, fx dy) { return (fx2)dx * dx + (fx2)dy * dy; }
 
 // Digit-by-digit integer square root. Exact, branch-deterministic, no libm.
 static inline uint64_t ob_isqrt64(uint64_t v) {

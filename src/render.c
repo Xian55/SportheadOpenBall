@@ -1,9 +1,11 @@
 // Pitch, goals, players and ball, drawn from a GameState with raylib
 // primitives. v1 uses no image assets at all; sprites replace these shapes
 // later without the sim ever knowing.
+#include <math.h>
 #include "raylib.h"
 #include "render.h"
 #include "config.h"
+#include "touch.h"
 
 #define SKY        (Color){  38,  42,  62, 255 }
 #define GRASS      (Color){  46, 122,  62, 255 }
@@ -35,7 +37,10 @@ void render_init(void) {
 void render_shutdown(void) { UnloadRenderTexture(g_target); }
 
 static void update_letterbox(void) {
-  float sw = (float)GetRenderWidth(), sh = (float)GetRenderHeight();
+  // Logical size. With the process marked DPI-aware (see dpi_win32.c) this is
+  // also the framebuffer size, so there is no second coordinate space to get
+  // wrong - which is exactly the bug this arrangement removes.
+  float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
   float sx = sw / (float)VIRT_W, sy = sh / (float)VIRT_H;
   g_scale = (sx < sy) ? sx : sy;
   g_offset = (Vector2){ (sw - VIRT_W * g_scale) * 0.5f, (sh - VIRT_H * g_scale) * 0.5f };
@@ -72,24 +77,28 @@ static void draw_goal(int side) {
 }
 
 static void draw_player(const Player *p, Color c, int seat) {
-  float hx = FX2F(p->x), hy = FX2F(p->y);
-  float br = FX2F(BODY_R), hr = FX2F(HEAD_R);
-  float by = hy + FX2F(BODY_OFF_Y);
+  float hx = FX2F(p->x), hy = FX2F(p->y), hr = FX2F(HEAD_R);
 
-  DrawCircleV((Vector2){ hx, by }, br, c);              // torso
-  DrawCircleV((Vector2){ hx, hy }, hr, c);              // head
+  DrawCircleV((Vector2){ hx, hy }, hr, c);
   DrawCircleLinesV((Vector2){ hx, hy }, hr, Fade(BLACK, 0.35f));
 
   // eye, so facing is readable at a glance
   float dir = p->facing ? 1.0f : -1.0f;
-  DrawCircleV((Vector2){ hx + dir * hr * 0.38f, hy - hr * 0.12f }, hr * 0.13f, RAYWHITE);
+  DrawCircleV((Vector2){ hx + dir * hr * 0.34f, hy - hr * 0.14f }, hr * 0.16f, RAYWHITE);
+  DrawCircleV((Vector2){ hx + dir * hr * 0.40f, hy - hr * 0.14f }, hr * 0.07f, BLACK);
 
-  // the kick foot is only drawn while its hitbox is actually live
-  if (p->kick_timer > 0) {
-    float fx_ = hx + dir * FX2F(FOOT_OFF_X);
-    float fy_ = hy + FX2F(FOOT_OFF_Y);
-    DrawCircleV((Vector2){ fx_, fy_ }, FX2F(FOOT_R), c);
-  }
+  // The leg goes ON TOP of the head. Drawn behind it, a forward swing is
+  // swallowed by the head circle exactly when the player needs to see it.
+  // Position comes from sim_foot() - the SAME call the hitbox uses - so what
+  // you see is precisely what the ball collides with.
+  fx fpx, fpy;
+  sim_foot(p, &fpx, &fpy);
+  Vector2 hip  = { hx, FX2F(sim_hip_y(p)) };
+  Vector2 foot = { FX2F(fpx), FX2F(fpy) };
+  Color   dark = { (unsigned char)(c.r * 52 / 100), (unsigned char)(c.g * 52 / 100),
+                   (unsigned char)(c.b * 52 / 100), 255 };
+  DrawLineEx(hip, foot, FX2F(FOOT_R) * 1.4f, dark);
+  DrawCircleV(foot, FX2F(FOOT_R), dark);
   (void)seat;
 }
 
@@ -99,6 +108,49 @@ static void draw_hud(const GameState *s) {
   const char *clock = TextFormat("%d:%02d", secs / 60, secs % 60);
   DrawText(score, (int)(FW / 2) - MeasureText(score, 44) / 2, 18, 44, RAYWHITE);
   DrawText(clock, (int)(FW / 2) - MeasureText(clock, 24) / 2, 66, 24, Fade(RAYWHITE, 0.75f));
+}
+
+static void draw_ball(const GameState *s) {
+  Vector2 c = { FX2F(s->ball_x), FX2F(s->ball_y) };
+  float   r = FX2F(BALL_R);
+  DrawCircleV(c, r, BALLCOL);
+  DrawCircleLinesV(c, r, Fade(BLACK, 0.45f));
+
+  // Spin is carried in the sim state (so it can never diverge between peers)
+  // purely so the ball reads as rolling rather than sliding.
+  float a = FX2F(s->ball_spin) * (float)(PI / 180.0);
+  for (int i = 0; i < 2; i++) {
+    float t = a + (float)i * (float)(PI / 2.0);
+    Vector2 e = { c.x + cosf(t) * r * 0.62f, c.y + sinf(t) * r * 0.62f };
+    DrawLineEx(c, e, 3.0f, Fade(BLACK, 0.30f));
+  }
+}
+
+static void draw_banner(const GameState *s) {
+  const char *msg = 0;
+  int         sub = 0;
+
+  if (s->phase == PH_KICKOFF) {
+    msg = TextFormat("%d", (int)(s->phase_timer / TICK_HZ) + 1);
+    sub = 1;
+  } else if (s->phase == PH_GOAL) {
+    msg = "GOAL";
+  } else if (s->phase == PH_OVER) {
+    msg = (s->score[0] == s->score[1]) ? "DRAW"
+        : (s->score[0] >  s->score[1]) ? "RED WINS" : "BLUE WINS";
+  }
+  if (!msg) return;
+
+  int fs = 72;
+  int tw = MeasureText(msg, fs);
+  DrawRectangleRec((Rectangle){ 0, 250, FW, 120 }, Fade(BLACK, 0.35f));
+  DrawText(msg, (int)(FW / 2) - tw / 2, 268, fs, RAYWHITE);
+
+  if (sub) {
+    const char *hint = "RED: A D move, W jump, S kick     BLUE: arrows, UP jump, DOWN kick";
+    int hs = 18, hw = MeasureText(hint, hs);
+    DrawText(hint, (int)(FW / 2) - hw / 2, 392, hs, Fade(RAYWHITE, 0.70f));
+  }
 }
 
 // Draws the pitch into the virtual framebuffer.
@@ -116,10 +168,10 @@ static void draw_scene(const GameState *s) {
   draw_player(&s->p[0], P0COL, 0);
   draw_player(&s->p[1], P1COL, 1);
 
-  DrawCircleV((Vector2){ FX2F(s->ball_x), FX2F(s->ball_y) }, FX2F(BALL_R), BALLCOL);
-  DrawCircleLinesV((Vector2){ FX2F(s->ball_x), FX2F(s->ball_y) }, FX2F(BALL_R), Fade(BLACK, 0.45f));
-
+  draw_ball(s);
   draw_hud(s);
+  draw_banner(s);
+  touch_draw();
 }
 
 void render_frame(const GameState *s) {

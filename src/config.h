@@ -30,22 +30,49 @@
 #define GROUND_Y       FXI(620)     // y grows downward; this is the grass line
 #define CEIL_Y         FXI(0)
 #define GOAL_DEPTH     FXI(96)      // how far the net box cuts into the wall
-#define GOAL_H         FXI(168)     // crossbar height above the ground
+// Goal mouth: two head-diameters tall plus a little headroom. Derived from
+// HEAD_R rather than hardcoded so retuning the head keeps the goal in scale.
+#define GOAL_H         (HEAD_R * 4 + FXI(16))   // = 2 * (2*HEAD_R) + 16
 #define POST_R         FXI(7)       // crossbar tip modelled as a CIRCLE so it
                                     // reuses the circle-circle path exactly
 
 // --- players ---------------------------------------------------------------
+// A player is a BIG HEAD and a leg. There is no torso: the head is the body,
+// and it is what heads the ball.
+// LEG_LEN must exceed HEAD_R, or the foot at full forward swing ends up INSIDE
+// the head circle and the leg is invisible exactly when it matters. That, plus
+// "the foot rests on the turf", fixes the head height:
+//   PLAYER_REST_Y = GROUND_Y - FOOT_R - LEG_LEN - LEG_PIVOT_Y
+// The hip sits LOW, near the bottom of the head, where the head circle is
+// narrow - so a forward swing sweeps clear of it instead of vanishing behind
+// the widest part. The renderer also draws the leg IN FRONT of the head.
 #define HEAD_R         FXI(42)
-#define BODY_R         FXI(26)
-#define BODY_OFF_Y     FXI(46)      // body centre below head centre
-#define FOOT_R         FXI(20)
-#define FOOT_OFF_X     FXI(44)      // kick-leg circle, signed by facing
-#define FOOT_OFF_Y     FXI(52)
+#define LEG_PIVOT_Y    FXI(28)      // hip, low on the head
+#define LEG_LEN        FXI(40)      // hip -> foot centre
+#define FOOT_R         FXI(10)
 #define P_MOVE         FXF(5.0)     // px/frame. Arcade feel: velocity is SET, not accelerated
 #define P_JUMP         FXF(-11.5)
 #define P_MAX_VY       FXF(22.0)
 #define SPAWN_X_P0     FXI(320)
 #define SPAWN_X_P1     FXI(960)
+
+// --- the leg ---------------------------------------------------------------
+// Angle is in DEGREES (Q16.16), measured from straight down and signed toward
+// the direction the player faces: 0 = hanging at rest, +90 = stuck straight out
+// in front, negative = wound back behind.
+// Which model the kick button drives. Flipping this is a one-line change:
+//   0 = press swings the leg FORWARD toward +90, release drifts it back
+//   1 = hold winds the leg BACK to -75, release fires it forward like a spring
+//       with power proportional to the windup
+#define LEG_WINDUP_MODE 0
+
+#define LEG_REST       FXI(0)
+#define LEG_MAX_FWD    FXI(90)
+#define LEG_MAX_BACK   FXI(75)
+#define LEG_SWING_RATE FXF(9.0)     // deg/frame while the button is held
+#define LEG_RETURN_RATE FXF(6.0)    // deg/frame drifting back to rest
+#define LEG_SPRING     FXF(0.55)    // windup angle -> release angular velocity
+#define LEG_VEL_REF    FXF(41.0)    // angular velocity that yields a full-power kick
 
 // --- ball ------------------------------------------------------------------
 #define BALL_R         FXI(16)
@@ -57,12 +84,16 @@
 #define E_POST         FXF(0.65)
 #define BALL_DRAG_X    FXF(0.995)
 #define BALL_FRIC_G    FXF(0.980)
-#define KICK_IMPULSE   FXF(13.0)
+#define KICK_IMPULSE   FXF(15.0)    // at LEG_VEL_REF; scaled by actual swing speed
+// A kick fires along a blend of the contact normal and the direction the foot
+// is actually SWINGING. The tangent is what lets you scoop: with the leg low
+// the foot travels forward-and-up, so getting under the ball lifts it, while a
+// pure-normal impulse would only ever drive it flat.
+#define KICK_W_NORMAL  FXF(0.45)
+#define KICK_W_TANGENT FXF(0.55)
 
 // --- shared ----------------------------------------------------------------
 #define GRAVITY        FXF(0.55)    // px/frame^2
-#define KICK_ACTIVE    6            // frames the foot hitbox stays live
-#define KICK_COOLDOWN  18
 #define KICKOFF_FREEZE 60
 #define CELEBRATE_FRAMES (TICK_HZ * 2)
 #define MATCH_SECONDS  90

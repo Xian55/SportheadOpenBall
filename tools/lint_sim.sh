@@ -15,7 +15,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-TIER1="src/fixed.h src/config.h src/sim.h src/sim.c src/checksum.h src/checksum.c
+TIER1="src/fixed.h src/trig.h src/config.h src/sim.h src/sim.c src/checksum.h src/checksum.c
        src/proto.h src/proto.c src/rollback.h src/rollback.c"
 
 bad=0
