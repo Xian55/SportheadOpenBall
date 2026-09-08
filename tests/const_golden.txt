@@ -1,0 +1,62 @@
+# raw Q16.16 integers. Regenerate with: const_test > tests/const_golden.txt
+# and say so explicitly in the commit message.
+[protocol]
+PROTO_VER          1
+TICK_HZ            60
+INPUT_DELAY        2
+MAX_ROLLBACK       12
+INPUT_HIST         8
+RB_N               128
+FRAME_ADV_LIMIT    4
+[pitch]
+FIELD_W            83886080
+FIELD_H            47185920
+GROUND_Y           40632320
+CEIL_Y             0
+GOAL_DEPTH         6291456
+GOAL_H             12058624
+POST_R             458752
+[player]
+HEAD_R             2752512
+LEG_PIVOT_Y        0
+LEG_LEN            3538944
+FOOT_R             655360
+P_MOVE             406323
+P_JUMP             -386662
+P_MAX_VY           1441792
+SPAWN_X_P0         20971520
+SPAWN_X_P1         62914560
+PLAYER_REST_Y      37879808
+[leg]
+LEG_REST           0
+LEG_MAX_FWD        5898240
+LEG_MAX_BACK       4915200
+LEG_GRAVITY        196608
+LEG_DAMP           58982
+LEG_KICK_VEL       1572864
+LEG_HOLD_TORQUE    262144
+LEG_SETTLE_A       262144
+LEG_SETTLE_V       131072
+LEG_MAX_VEL        1572864
+LEG_VEL_REF        1179648
+[ball]
+BALL_R             1048576
+BALL_SUBSTEPS      3
+BALL_MAX_SPD       1966080
+E_GROUND           42598
+E_WALL             52429
+E_HEAD             55706
+E_POST             42598
+BALL_DRAG_X        65405
+BALL_FRIC_G        64225
+KICK_IMPULSE       1703936
+KICK_W_NORMAL      29491
+KICK_W_TANGENT     36045
+[shared]
+GRAVITY            7602
+KICKOFF_FREEZE     60
+CELEBRATE_FRAMES   120
+MATCH_FRAMES       5400
+[layout]
+sizeof_Player      28
+sizeof_GameState   96

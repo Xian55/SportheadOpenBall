@@ -1,0 +1,28 @@
+# replay_test: 3600 frames, seed 0x5eed1234
+# sizeof(GameState)=96 sizeof(Player)=28
+f200    f6a0d5c1
+f400    1897ae5c
+f600    72c78ea5
+f800    37975823
+f1000   8e93814a
+f1200   1cd491d5
+f1400   8cd5ddf8
+f1600   003e5a0a
+f1800   d16d4980
+f2000   9dab6a46
+f2200   6d23321f
+f2400   fc8d14f5
+f2600   e08d9385
+f2800   2e4ca4b4
+f3000   f79f5115
+f3200   6d8d95d9
+f3400   8362de99
+f3600   40bdd586
+--- final ---
+frame        3600
+rng          1592594996
+p0           x=9594476 y=31084734 vx=0 vy=-211816 leg=246607 legv=332352 ground=0 kick=0 face=1
+p1           x=72666312 y=35719478 vx=0 vy=-341050 leg=5721294 legv=-176946 ground=0 kick=0 face=0
+ball         x=41943040 y=39582746 vx=0 vy=-2994 spin=257816
+match        clock=2038 score=1-0 phase=1 timer=0 scorer=0
+checksum     40bdd586

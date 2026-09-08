@@ -84,14 +84,28 @@ elseif (WIN32)
 endif()
 
 # ---------------------------------------------------------------------------
-# Headless tests: native only, raylib-free, and deliberately NOT linked against
-# m. A stray sqrtf/fabs in tier 1 becomes a link error instead of a desync.
+# Headless tests: raylib-free, and deliberately NOT linked against m. A stray
+# sqrtf/fabs in tier 1 becomes a link error instead of a silent desync.
 # ---------------------------------------------------------------------------
+set(OB_TESTS fixed_test const_test replay_test)
+
 if (NOT EMSCRIPTEN AND OB_DEV_TOOLS)
-  foreach(t fixed_test const_test sim_test replay_test)
+  foreach(t ${OB_TESTS})
     if (EXISTS ${CMAKE_SOURCE_DIR}/tests/${t}.c)
       add_executable(${t} tests/${t}.c $<TARGET_OBJECTS:ob_sim>)
       target_include_directories(${t} PRIVATE src tests)
     endif()
   endforeach()
+endif()
+
+# The determinism gate proper: the SAME replay built to wasm and run under node.
+# Diffing its output against the native run is the only thing that actually
+# proves both toolchains compute bit-identical results - every other guard in
+# this file is prevention, this is detection.
+if (EMSCRIPTEN AND OB_DEV_TOOLS)
+  add_executable(replay_test tests/replay_test.c $<TARGET_OBJECTS:ob_sim>)
+  target_include_directories(replay_test PRIVATE src tests)
+  set_target_properties(replay_test PROPERTIES SUFFIX ".js")
+  # Plain node program: no canvas, no GL, no shell file.
+  target_link_options(replay_test PRIVATE -sENVIRONMENT=node -sNODERAWFS=0)
 endif()

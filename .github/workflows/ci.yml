@@ -28,10 +28,12 @@ jobs:
       - name: Tests
         run: |
           B=../build-native
-          for t in fixed_test const_test sim_test replay_test; do
-            [ -x "$B/$t" ] && { echo "--- $t"; "$B/$t"; }
-          done
-          exit 0
+          echo "--- fixed_test";  "$B/fixed_test"
+          echo "--- const_test";  "$B/const_test"  > /tmp/const.txt
+          diff --strip-trailing-cr tests/const_golden.txt  /tmp/const.txt
+          echo "--- replay_test"; "$B/replay_test" > /tmp/replay.txt
+          diff --strip-trailing-cr tests/replay_golden.txt /tmp/replay.txt
+          echo "all goldens match"
 
   windows:
     runs-on: windows-latest
@@ -52,10 +54,12 @@ jobs:
       - name: Tests
         run: |
           B=../build-native
-          for t in fixed_test const_test sim_test replay_test; do
-            [ -x "$B/$t.exe" ] && { echo "--- $t"; "$B/$t.exe"; }
-          done
-          exit 0
+          echo "--- fixed_test";  "$B/fixed_test.exe"
+          echo "--- const_test";  "$B/const_test.exe"  > /tmp/const.txt
+          diff --strip-trailing-cr tests/const_golden.txt  /tmp/const.txt
+          echo "--- replay_test"; "$B/replay_test.exe" > /tmp/replay.txt
+          diff --strip-trailing-cr tests/replay_golden.txt /tmp/replay.txt
+          echo "all goldens match"
 
   web:
     runs-on: ubuntu-latest
@@ -69,3 +73,33 @@ jobs:
           emcmake cmake -S . -B ../build-web -DCMAKE_BUILD_TYPE=Release \
                         -DPLATFORM=Web -DOB_DEV_TOOLS=OFF
           cmake --build ../build-web -j"$(nproc)"
+
+  determinism:
+    # The gate the whole rollback design rests on: build the SAME replay for
+    # native and for wasm, run both, and require byte-identical output. Every
+    # other guard in this repo is prevention; this is detection.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: System deps (raylib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev                                   libxcursor-dev libxi-dev libgl1-mesa-dev
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: latest
+      - name: Build native replay
+        run: |
+          cmake -S . -B ../b-native -DCMAKE_BUILD_TYPE=Release
+          cmake --build ../b-native -j"$(nproc)" --target replay_test
+      - name: Build wasm replay
+        run: |
+          emcmake cmake -S . -B ../b-web -DCMAKE_BUILD_TYPE=Release                         -DPLATFORM=Web -DOB_DEV_TOOLS=ON
+          cmake --build ../b-web -j"$(nproc)" --target replay_test
+      - name: native == wasm, byte for byte
+        run: |
+          ../b-native/replay_test > /tmp/native.txt
+          node ../b-web/replay_test.js > /tmp/wasm.txt
+          diff --strip-trailing-cr /tmp/native.txt /tmp/wasm.txt
+          diff --strip-trailing-cr tests/replay_golden.txt /tmp/native.txt
+          echo "native and wasm agree, and both match the committed golden"
