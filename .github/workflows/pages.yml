@@ -39,8 +39,14 @@ jobs:
           # looks exactly like a fix that did not work.
           SHA="${GITHUB_SHA::7}"
           sed -i "s/__OB_BUILD__/$SHA/g" _site/index.html
-          sed -i "s#src=\"index.js\"#src=\"index.js?v=$SHA\"#g" _site/index.html
-          grep -o "index.js?v=[a-f0-9]*" _site/index.html | head -1 || echo "WARNING: script tag not versioned"
+          # emscripten MINIFIES the shell and strips attribute quotes, so the tag
+          # is <script async src=index.js> - match both quoted and bare forms.
+          sed -i -E "s#src=\"?index\.js\"?#src=\"index.js?v=$SHA\"#g" _site/index.html
+          # Hard-fail rather than warn: a silent miss here is exactly the stale-cache
+          # trap this step exists to prevent.
+          grep -q "index.js?v=$SHA" _site/index.html || { echo "script tag not versioned"; exit 1; }
+          grep -q "OB_BUILD=\"\?$SHA" _site/index.html || { echo "build id not stamped"; exit 1; }
+          echo "cache-busted at $SHA"
           # The vendored signalling bundle ships alongside (added in M4).
           [ -f web/trystero-nostr.min.js ] && cp web/trystero-nostr.min.js _site/ || true
       - uses: actions/configure-pages@v6
