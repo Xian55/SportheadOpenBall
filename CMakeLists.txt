@@ -65,6 +65,11 @@ if (EMSCRIPTEN)
     # goes stale on grow).
     -sINITIAL_MEMORY=33554432
     -sFILESYSTEM=0
+    # Drop the node/worker/shell support code from the JS glue - this only ever
+    # runs in a browser tab. emmalloc is a smaller allocator than dlmalloc and
+    # is plenty for a game that allocates almost nothing after startup.
+    -sENVIRONMENT=web
+    -sMALLOC=emmalloc
     --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html)
   # The shell is baked in at LINK time, so edits must force a relink.
   set_property(TARGET openball APPEND PROPERTY LINK_DEPENDS
