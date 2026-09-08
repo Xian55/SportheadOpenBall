@@ -60,19 +60,19 @@
 // Angle is in DEGREES (Q16.16), measured from straight down and signed toward
 // the direction the player faces: 0 = hanging at rest, +90 = stuck straight out
 // in front, negative = wound back behind.
-// Which model the kick button drives. Flipping this is a one-line change:
-//   0 = press swings the leg FORWARD toward +90, release drifts it back
-//   1 = hold winds the leg BACK to -75, release fires it forward like a spring
-//       with power proportional to the windup
-#define LEG_WINDUP_MODE 0
-
 #define LEG_REST       FXI(0)
 #define LEG_MAX_FWD    FXI(90)
 #define LEG_MAX_BACK   FXI(75)
 #define LEG_SWING_RATE FXF(9.0)     // deg/frame while the button is held
 #define LEG_RETURN_RATE FXF(6.0)    // deg/frame drifting back to rest
 #define LEG_SPRING     FXF(0.55)    // windup angle -> release angular velocity
-#define LEG_VEL_REF    FXF(41.0)    // angular velocity that yields a full-power kick
+// Cap on the snap-back speed. The foot only moves BETWEEN frames while the ball
+// is tested within them, so an uncapped spring (49.5 deg/frame at a full cock =
+// 34 px of arc) can sweep straight past the ball and register no contact. At 28
+// deg/frame the foot travels ~19.5 px per frame against a 26 px combined
+// foot+ball radius, which cannot tunnel.
+#define LEG_MAX_VEL    FXF(28.0)
+#define LEG_VEL_REF    LEG_MAX_VEL  // a full-speed snap is a full-power kick
 
 // --- ball ------------------------------------------------------------------
 #define BALL_R         FXI(16)

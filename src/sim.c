@@ -125,47 +125,38 @@ void sim_foot(const Player *p, fx *out_x, fx *out_y) {
   *out_y = sim_hip_y(p) + fx_mul(LEG_LEN, c);
 }
 
+// Pressing kick FIRES the leg forward and up - that sweep is the strike. It
+// holds at full extension while the button is down, then drifts back to rest on
+// release.
+//
+// The direction is not a style choice, it falls out of the geometry: with the
+// foot at (dir*L*sin t, L*cos t) and y pointing down, a RISING leg (t
+// increasing) moves the foot forward and up, while a descending one moves it
+// backward and down. Only the upswing can kick a ball forward; the downswing is
+// a stomp. An earlier build had the release snap downward and every kick drove
+// the ball into the turf at a third of the intended power.
 static void leg_update(Player *p, int kick) {
-#if LEG_WINDUP_MODE
-  // Charge model: holding kick winds the leg BACK, releasing fires it forward
-  // like a spring with power proportional to how far it was wound.
-  if (kick) {
-    p->leg_vel = 0;
-    p->leg -= LEG_SWING_RATE;
-    if (p->leg < -LEG_MAX_BACK) p->leg = -LEG_MAX_BACK;
-  } else {
-    if (p->kick_held && p->leg < 0) p->leg_vel = fx_mul(-p->leg, LEG_SPRING);
+  int press = (kick && !p->kick_held);
 
-    if (p->leg_vel > 0) {
-      p->leg += p->leg_vel;
-      if (p->leg >= LEG_MAX_FWD) { p->leg = LEG_MAX_FWD; p->leg_vel = 0; }
-    } else if (p->leg > LEG_REST) {
-      p->leg -= LEG_RETURN_RATE;
-      if (p->leg < LEG_REST) p->leg = LEG_REST;
-    } else if (p->leg < LEG_REST) {
-      p->leg += LEG_RETURN_RATE;
-      if (p->leg > LEG_REST) p->leg = LEG_REST;
-    }
+  if (press && p->leg <= LEG_REST) {
+    p->leg_vel = LEG_MAX_VEL;          // fire
   }
-#else
-  // Direct model: holding kick swings the leg FORWARD toward +90, releasing
-  // lets it drift back down to rest.
-  if (kick) {
-    p->leg_vel = (p->leg < LEG_MAX_FWD) ? LEG_SWING_RATE : 0;
-    p->leg += LEG_SWING_RATE;
-    if (p->leg > LEG_MAX_FWD) p->leg = LEG_MAX_FWD;
-  } else {
-    p->leg_vel = 0;
-    if (p->leg > LEG_REST) {
-      p->leg -= LEG_RETURN_RATE;
-      if (p->leg < LEG_REST) p->leg = LEG_REST;
-    }
+
+  if (p->leg_vel > 0) {
+    p->leg += p->leg_vel;
+    if (p->leg >= LEG_MAX_FWD) { p->leg = LEG_MAX_FWD; p->leg_vel = 0; }
+  } else if (!kick && p->leg > LEG_REST) {
+    // Released: the leg simply falls back to rest. Harmless - leg_vel stays 0,
+    // so a returning leg carries no kick power.
+    p->leg -= LEG_RETURN_RATE;
+    if (p->leg < LEG_REST) p->leg = LEG_REST;
   }
-#endif
+
   p->kick_held = (uint8_t)(kick ? 1 : 0);
 }
 
-// How fast the foot is travelling right now, as Q16.16 in 0..1.
+// How fast the foot is travelling, as Q16.16 in 0..1. Only ever non-zero on the
+// upswing, which is the only part of the arc that can strike the ball forward.
 static fx leg_power(const Player *p) {
   if (p->leg_vel <= 0) return 0;
   fx q = fx_div(p->leg_vel, LEG_VEL_REF);

@@ -53,7 +53,10 @@ void sim_step(GameState *s, const uint8_t in[2]);
 void sim_foot(const Player *p, fx *fx_out, fx *fy_out);
 fx   sim_hip_y(const Player *p);
 
-// Resting head-centre y: the foot hangs straight down and just touches the turf.
-#define PLAYER_REST_Y (GROUND_Y - FOOT_R - LEG_LEN - LEG_PIVOT_Y)
+// Resting head-centre y: the HEAD sits on the ground line. The boot hangs below
+// it, as in the original - the ground is what the head rests on, not what the
+// foot must reach. Constraining the foot to the turf instead was what kept
+// pushing the head up out of range of a grounded ball.
+#define PLAYER_REST_Y (GROUND_Y - HEAD_R)
 
 #endif // OB_SIM_H
