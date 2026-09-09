@@ -144,10 +144,33 @@ goal-celebration overlay) and **kick impulse**. Do not present either as derived
 
 - **Windows display scaling breaks raylib's framebuffer assumptions.** At 125% a 1280x720
   window got a 1600x900 framebuffer; GL's bottom-left origin then put the scene in the
-  corner. Everything now draws into a 1280x720 `RenderTexture` blitted letterboxed, and
-  the letterbox math uses `GetRenderWidth/Height` (framebuffer), **not**
-  `GetScreenWidth/Height` (logical). This also makes `OB_SHOT` output byte-comparable
-  across machines and gives one place to map cursor to pitch coordinates.
+  corner. `FLAG_WINDOW_HIGHDPI` is what fixes it: raylib then queries the real
+  framebuffer and installs a screenScale matrix, so drawing uses LOGICAL coordinates
+  (`GetScreenWidth/Height`) and raylib stretches them across the full buffer. The
+  letterbox math is therefore in logical space.
+- **Do NOT render the pitch through a fixed 1280x720 `RenderTexture`.** It used to, and
+  it cost real sharpness: the blit resamples every pixel a second time, and wherever it
+  DOWNSCALES (a landscape phone sits near 0.54) a 1 px net strand lands on half a pixel
+  and vanishes — losing only *some* strands, which reads as a rendering fault rather than
+  a thin line. Normal play now draws straight to the backbuffer through a `Camera2D`
+  carrying the same letterbox transform, at the display's own resolution. The render
+  texture survives for `OB_SHOT` alone, where a byte-comparable 1280x720 export is the
+  point; that path forces the scale factors to 1 so the export is unaffected by the
+  window.
+- **Size strokes in PHYSICAL pixels, not virtual units.** `stroke(n)` in `render.c`
+  returns the virtual width that covers `n` whole framebuffer pixels, and never returns
+  less than `n`. Virtual-unit hairlines are the first thing a scaled-down pitch loses.
+- **The web canvas buffer must be sized in DEVICE pixels.** `sync_canvas_size` multiplies
+  the CSS size by `emscripten_get_device_pixel_ratio()` (capped at 2x for fill rate).
+  Sizing it in CSS pixels meant a phone at dPR 3 rendered at a third of its real
+  resolution and let the browser upscale — "high resolution and yet blurry". This needs
+  no input fix: raylib's `EmscriptenTouchCallback` already scales touches by
+  `GetScreenWidth()/cssWidth`, and emscripten's GLFW `calculateMouseCoords` scales by
+  `GLFW.active.width/rect.width`, so both land in the same enlarged space. Note that
+  emscripten's `updateCanvasDimensions` force-writes the canvas CSS size from the value
+  passed to `SetWindowSize` **unless** CSS scaling is enabled — it is here, so the
+  stylesheet keeps ownership of the CSS size and there is no feedback loop. Verified:
+  `canvas.width / rect.width` stays pinned at exactly `devicePixelRatio`.
 - **raylib's default font is a 10px bitmap.** Scaled to 44px its zero glyph legitimately
   looks like a rectangle with a slot. That is not tofu and not a bug — do not go hunting
   for a font problem. Verified by dumping the string bytes: `30 20 20 2d 20 20 30`.

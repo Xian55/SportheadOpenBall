@@ -49,6 +49,7 @@ static int        g_rb_started;
 static uint32_t   g_simshot;
 static RbSession  g_rb;
 static char       g_room[32] = "local";
+static double     g_wait_t0;       // when we started waiting for an opponent
 
 static void net_frame(void) {
   net_pump();
@@ -71,7 +72,20 @@ static void net_frame(void) {
     } else if (net_state() == NET_FAILED) {
       render_set_status(net_last_error());
     } else {
-      render_set_status("connecting to peer...");
+      // ANIMATED, and with the elapsed time. Signalling legitimately takes a
+      // while - Trystero dials several public Nostr relays and some are always
+      // down, so the console fills with failed WebSocket connections that are
+      // expected and survivable - but a caption frozen on "connecting to
+      // peer..." for twenty seconds is indistinguishable from a hung game. A
+      // moving cue says the client is alive; the seconds say how long it has
+      // been trying, which is what tells you when to give up and re-share.
+      static const char *dots[4] = { "", ".", "..", "..." };
+      if (g_wait_t0 == 0.0) g_wait_t0 = GetTime();
+      int  n    = (int)(GetTime() * 2.0) & 3;         // 2 Hz
+      int  secs = (int)(GetTime() - g_wait_t0);
+      char msg[96];
+      snprintf(msg, sizeof msg, "waiting for opponent%s  (%ds)", dots[n], secs);
+      render_set_status(msg);
     }
     // Nothing to simulate yet. Render the kickoff state so the window is not
     // blank, but the hotseat control hints below it are misleading here.
@@ -174,7 +188,20 @@ static void net_frame(void) {
 static void sync_canvas_size(void) {
   double cw = 0, ch = 0;
   if (emscripten_get_element_css_size("#canvas", &cw, &ch) != EMSCRIPTEN_RESULT_SUCCESS) return;
-  int w = (int)cw, h = (int)ch;
+
+  // Size the DRAWING BUFFER in device pixels, not CSS pixels. The CSS size keeps
+  // the canvas filling the viewport; the buffer is what we actually rasterise
+  // into. Sizing it in CSS pixels on a phone with devicePixelRatio 3 meant
+  // rendering at a third of the screen's real resolution and letting the browser
+  // upscale - which is exactly what "high resolution and yet blurry" looks like.
+  //
+  // Capped at 2x: beyond that the fill-rate cost on a phone outweighs any
+  // visible sharpening.
+  double dpr = emscripten_get_device_pixel_ratio();
+  if (dpr < 1.0) dpr = 1.0;
+  if (dpr > 2.0) dpr = 2.0;
+
+  int w = (int)(cw * dpr + 0.5), h = (int)(ch * dpr + 0.5);
   if (w > 0 && h > 0 && (w != GetScreenWidth() || h != GetScreenHeight())) SetWindowSize(w, h);
 }
 #endif
@@ -316,7 +343,7 @@ int main(void) {
     }
   }
 
-  render_init();
+  render_init(g_shot_frame >= 0);
   touch_init();
   sim_init(&g_state, g_seed);
   g_prev = g_state;

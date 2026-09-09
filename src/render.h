@@ -7,11 +7,14 @@
 // fx -> float, for drawing only. Never call this in tier 1.
 #define FX2F(v) ((float)(v) * (1.0f / 65536.0f))
 
-// The pitch is a FIXED 1280x720 virtual space. Everything draws into a render
-// texture at that size, which is then blitted letterboxed to whatever the
-// window/canvas actually is. This keeps the game resolution-independent, keeps
-// OB_SHOT output byte-comparable across machines regardless of Windows display
-// scaling, and gives us one place to map cursor -> pitch coordinates.
+// The pitch is a FIXED 1280x720 virtual space, letterboxed into whatever the
+// window/canvas actually is. That keeps the game resolution-independent and
+// gives us one place to map cursor -> pitch coordinates.
+//
+// It is a COORDINATE system, not a buffer: normal play draws straight to the
+// backbuffer at the display's own resolution, with a Camera2D applying the
+// letterbox transform. Only OB_SHOT goes through a real 1280x720 texture, so
+// its export stays byte-comparable across machines.
 #define VIRT_W 1280
 #define VIRT_H 720
 
@@ -24,7 +27,11 @@ void render_set_status(const char *msg);
 // whether both are showing the SAME game.
 void render_set_local_seat(int seat);
 
-void render_init(void);
+// shot_mode != 0 routes drawing through a 1280x720 render texture so OB_SHOT can
+// export a byte-comparable image. Normal play draws straight to the backbuffer
+// at the display's own resolution instead - going through a fixed-size texture
+// resamples the whole frame and eats thin lines on any downscaled display.
+void render_init(int shot_mode);
 void render_shutdown(void);
 // Draws AND presents. `prev` is the state one tick before `cur`, and alpha is
 // how far between them the display currently sits. The sim ticks at a fixed

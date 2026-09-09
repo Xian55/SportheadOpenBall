@@ -22,12 +22,30 @@ static const float FW = FX2F(FIELD_W);
 static const float GD = FX2F(GOAL_DEPTH);
 static const float CBY = FX2F(GROUND_Y - GOAL_H);   // crossbar y
 
-// Everything is drawn into this at exactly VIRT_W x VIRT_H, then blitted to
-// the window. Windows display scaling (and the web canvas) make the real
-// framebuffer an arbitrary size; the pitch must not care.
+// The pitch is a fixed VIRT_W x VIRT_H coordinate space, but it is NOT rendered
+// through a fixed-size buffer any more. Going via a 1280x720 render texture cost
+// real sharpness: on any display where the letterbox scale is not exactly 1 the
+// blit resamples every pixel a second time, and where it downscales (a landscape
+// phone sits near 0.54) a 1 px net line lands on half a pixel and washes out
+// entirely - which is why "not every line is visible". Now the scene is drawn
+// straight to the backbuffer through a Camera2D at the display's own resolution,
+// so nothing is resampled and lines can be sized in real pixels.
+//
+// The render texture survives for OB_SHOT alone, where a byte-comparable
+// 1280x720 export is the whole point.
 static RenderTexture2D g_target;
-static float  g_scale = 1.0f;   // virtual -> screen
+static int    g_shot_mode;      // draw via g_target so OB_SHOT can read it back
+static float  g_scale = 1.0f;   // virtual -> screen (logical px)
+static float  g_px    = 1.0f;   // virtual -> PHYSICAL px, incl. any DPI scaling
 static Vector2 g_offset;        // letterbox origin, screen px
+
+// Stroke width, in VIRTUAL units, that is guaranteed to cover at least `n` whole
+// physical pixels. A hairline asked for in virtual units disappears the moment
+// the pitch is scaled down; asking in physical units is what actually survives.
+static float stroke(float n) {
+  float w = n / ((g_px > 0.0001f) ? g_px : 1.0f);
+  return (w > n) ? w : n;
+}
 
 static char g_status[96];
 static int  g_local_seat = -1;
@@ -41,21 +59,31 @@ void render_set_status(const char *msg) {
   g_status[i] = 0;
 }
 
-void render_init(void) {
-  g_target = LoadRenderTexture(VIRT_W, VIRT_H);
-  SetTextureFilter(g_target.texture, TEXTURE_FILTER_BILINEAR);
+void render_init(int shot_mode) {
+  g_shot_mode = shot_mode;
+  if (g_shot_mode) {
+    g_target = LoadRenderTexture(VIRT_W, VIRT_H);
+    SetTextureFilter(g_target.texture, TEXTURE_FILTER_BILINEAR);
+  }
 }
 
-void render_shutdown(void) { UnloadRenderTexture(g_target); }
+void render_shutdown(void) { if (g_shot_mode) UnloadRenderTexture(g_target); }
 
 static void update_letterbox(void) {
-  // Logical size. With the process marked DPI-aware (see dpi_win32.c) this is
-  // also the framebuffer size, so there is no second coordinate space to get
-  // wrong - which is exactly the bug this arrangement removes.
+  // Drawing happens in LOGICAL coordinates: with FLAG_WINDOW_HIGHDPI raylib
+  // installs a screenScale matrix and stretches them across the real
+  // framebuffer, so the letterbox maths belongs in logical space.
   float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
   float sx = sw / (float)VIRT_W, sy = sh / (float)VIRT_H;
   g_scale = (sx < sy) ? sx : sy;
   g_offset = (Vector2){ (sw - VIRT_W * g_scale) * 0.5f, (sh - VIRT_H * g_scale) * 0.5f };
+
+  // ...but a "one pixel wide" line means one FRAMEBUFFER pixel, and on a scaled
+  // desktop display the framebuffer is larger than the logical size. On the web
+  // the two are equal, because we size the canvas buffer in device pixels
+  // ourselves (see sync_canvas_size), and the dPR lives there instead.
+  float rw = (float)GetRenderWidth();
+  g_px = g_scale * ((sw > 0.0f) ? (rw / sw) : 1.0f);
 }
 
 // Same maths as update_letterbox, computed fresh and without side effects so
@@ -84,11 +112,15 @@ static void draw_goal(int side) {
   float x0 = (side < 0) ? 0.0f : FW - GD;
   float pr = FX2F(POST_R);
 
-  // net hatching, drawn first so the frame sits on top of it
+  // Net hatching, drawn first so the frame sits on top of it. The width is asked
+  // for in physical pixels: at 1.0 virtual unit these strands are the first
+  // thing a downscaled pitch loses, and losing only SOME of them looks like a
+  // rendering fault rather than a thin line.
+  float nw = stroke(1.0f);
   for (float x = x0 + 8.0f; x < x0 + GD; x += 14.0f)
-    DrawLineEx((Vector2){ x, CBY }, (Vector2){ x, GY }, 1.0f, NETCOL);
+    DrawLineEx((Vector2){ x, CBY }, (Vector2){ x, GY }, nw, NETCOL);
   for (float y = CBY + 10.0f; y < GY; y += 14.0f)
-    DrawLineEx((Vector2){ x0, y }, (Vector2){ x0 + GD, y }, 1.0f, NETCOL);
+    DrawLineEx((Vector2){ x0, y }, (Vector2){ x0 + GD, y }, nw, NETCOL);
 
   // crossbar, and the post tip the ball actually collides with (a circle, so
   // the sim reuses its circle-circle path)
@@ -189,12 +221,16 @@ static void draw_banner(const GameState *s) {
 
 // Draws the pitch into the virtual framebuffer.
 static void draw_scene(const GameState *s) {
-  ClearBackground(SKY);
+  // A covering rectangle rather than ClearBackground: drawn straight to the
+  // backbuffer a clear would wipe the letterbox bars too, and this fills exactly
+  // the virtual area in both paths.
+  DrawRectangleRec((Rectangle){ 0, 0, (float)VIRT_W, (float)VIRT_H }, SKY);
 
   // pitch
   DrawRectangleRec((Rectangle){ 0, GY, FW, FX2F(FIELD_H) - GY }, GRASS);
   DrawRectangleRec((Rectangle){ 0, GY, FW, 6 }, GRASS_DARK);
-  DrawLineEx((Vector2){ FW / 2, CBY - 40 }, (Vector2){ FW / 2, GY }, 2.0f, Fade(LINE, 0.5f));
+  DrawLineEx((Vector2){ FW / 2, CBY - 40 }, (Vector2){ FW / 2, GY },
+             stroke(2.0f), Fade(LINE, 0.5f));
 
   draw_goal(-1);
   draw_goal(+1);
@@ -257,20 +293,43 @@ void render_frame(const GameState *prev, const GameState *cur, float alpha) {
   v.ball_spin = lerp_ang(prev->ball_spin, cur->ball_spin, alpha);
   const GameState *s = &v;
 
-  BeginTextureMode(g_target);
-    draw_scene(s);
-  EndTextureMode();
-
   update_letterbox();
+
+  // OB_SHOT wants a deterministic 1280x720 image regardless of the window, so
+  // that path still goes through the render texture - at scale 1, where the
+  // resampling that costs sharpness on screen does not happen at all.
+  if (g_shot_mode) {
+    float ss = g_scale, spx = g_px;
+    g_scale = 1.0f; g_px = 1.0f;
+    BeginTextureMode(g_target);
+      draw_scene(s);
+    EndTextureMode();
+    g_scale = ss; g_px = spx;
+  }
+
   BeginDrawing();
     ClearBackground(BLACK);
-    // Source height is negative: the render texture is bottom-up in GL.
-    DrawTexturePro(g_target.texture,
-                   (Rectangle){ 0, 0, (float)VIRT_W, -(float)VIRT_H },
-                   (Rectangle){ g_offset.x, g_offset.y,
-                                VIRT_W * g_scale, VIRT_H * g_scale },
-                   (Vector2){ 0, 0 }, 0.0f, WHITE);
-    // Touch controls go here, in SCREEN space and outside the render texture,
+    if (g_shot_mode) {
+      // Source height is negative: the render texture is bottom-up in GL.
+      DrawTexturePro(g_target.texture,
+                     (Rectangle){ 0, 0, (float)VIRT_W, -(float)VIRT_H },
+                     (Rectangle){ g_offset.x, g_offset.y,
+                                  VIRT_W * g_scale, VIRT_H * g_scale },
+                     (Vector2){ 0, 0 }, 0.0f, WHITE);
+    } else {
+      // Straight to the backbuffer at the display's own resolution. The camera
+      // carries the same letterbox transform the blit used to apply, and the
+      // scissor keeps the pitch off the black bars.
+      Camera2D cam = { .offset = g_offset, .target = { 0, 0 },
+                       .rotation = 0.0f, .zoom = g_scale };
+      BeginScissorMode((int)g_offset.x, (int)g_offset.y,
+                       (int)(VIRT_W * g_scale + 0.5f), (int)(VIRT_H * g_scale + 0.5f));
+        BeginMode2D(cam);
+          draw_scene(s);
+        EndMode2D();
+      EndScissorMode();
+    }
+    // Touch controls go here, in SCREEN space and outside the pitch transform,
     // so they keep a usable physical size instead of shrinking with the pitch.
     touch_draw();
   EndDrawing();
