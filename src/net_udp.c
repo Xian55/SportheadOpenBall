@@ -303,3 +303,14 @@ void net_close(void) {
   g_qn = 0;
   g_seat = -1;
 }
+
+int net_url_room(char *out, int cap) {
+  // No URL to read from natively; the room comes from OB_ROOM.
+  if (out && cap > 0) out[0] = 0;
+  return 0;
+}
+
+int net_local_hidden(void) {
+  // A native window is never throttled the way a background browser tab is.
+  return 0;
+}

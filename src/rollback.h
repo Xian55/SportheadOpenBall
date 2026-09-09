@@ -29,6 +29,7 @@ typedef struct RbSession {
   uint8_t   last_remote_in;        // prediction source: repeat the peer's last known input
   uint8_t   seat;
   uint8_t   peer_flags;
+  uint8_t   local_hidden;          // set by the caller; travels in the packet flags
 
   uint8_t   desync;                // latched; v1 policy is stop loudly
   uint32_t  desync_frame, desync_mine, desync_theirs;

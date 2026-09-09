@@ -28,3 +28,13 @@ void        net_close(void) { g_state = NET_IDLE; }
 const char *net_last_error(void) {
   return "online play is not in the web build yet - use two native clients";
 }
+
+int net_url_room(char *out, int cap) {
+  if (out && cap > 0) out[0] = 0;
+  return 0;
+}
+
+int net_local_hidden(void) {
+  // A native window is never throttled the way a background browser tab is.
+  return 0;
+}

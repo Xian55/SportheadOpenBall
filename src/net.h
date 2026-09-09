@@ -34,4 +34,14 @@ void     net_close(void);
 int         net_seat(void);
 const char *net_last_error(void);
 
+// Room code carried in the page URL (?room=CODE), for invite links. Returns 1
+// and fills `out` when one is present. Only the web transport can have one; the
+// others report none, so main.c needs no platform test.
+int         net_url_room(char *out, int cap);
+
+// Is this client backgrounded? A browser throttles a hidden tab's animation
+// frames to about 1 Hz, which starves the peer. Reported to the other side so it
+// can say "opponent tabbed out" instead of appearing to freeze for no reason.
+int         net_local_hidden(void);
+
 #endif // OB_NET_H

@@ -55,11 +55,9 @@ target_compile_definitions(openball PRIVATE OB_VERSION="${OB_VERSION}")
 
 # Transport is selected here and nowhere else.
 if (EMSCRIPTEN)
-  # net_web.c lands in M4. Until then a stub satisfies net.h so main.c can be
-  # written once against the interface instead of being littered with
-  # #ifdef __EMSCRIPTEN__ - and so the wasm build LINKS, which it did not when
-  # this branch supplied no transport at all.
-  target_sources(openball PRIVATE src/net_null.c)
+  # WebRTC via the js-library shim. net_null.c stays in the tree as the honest
+  # fallback for any future platform with no transport.
+  target_sources(openball PRIVATE src/net_web.c)
 else()
   target_sources(openball PRIVATE src/net_udp.c)
   if (WIN32)
@@ -85,10 +83,20 @@ if (EMSCRIPTEN)
     # is plenty for a game that allocates almost nothing after startup.
     -sENVIRONMENT=web
     -sMALLOC=emmalloc
+    --js-library ${CMAKE_SOURCE_DIR}/src/net_web.js
     --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html)
-  # The shell is baked in at LINK time, so edits must force a relink.
+  # Shell and js-library are baked in at LINK time, so edits must force a relink.
   set_property(TARGET openball APPEND PROPERTY LINK_DEPENDS
-    ${CMAKE_SOURCE_DIR}/web/shell.html)
+    ${CMAKE_SOURCE_DIR}/web/shell.html
+    ${CMAKE_SOURCE_DIR}/src/net_web.js)
+
+  # The vendored signalling bundle must sit next to index.html: the shim imports
+  # it relative to document.baseURI. An ALWAYS-run copy, not POST_BUILD, which
+  # silently skips when the target is up to date and would ship a stale bundle.
+  add_custom_target(copy_web ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/web/trystero-nostr.min.js $<TARGET_FILE_DIR:openball>/)
+  add_dependencies(copy_web openball)
 elseif (WIN32)
   if (OB_WIN_GUI)
     target_link_options(openball PRIVATE -mwindows)

@@ -79,12 +79,21 @@ static void rb_step(RbSession *s, uint32_t f) {
 }
 
 int rb_should_stall(RbSession *s) {
+  uint32_t ahead = s->frame - s->confirmed;
+
+  // The escape hatch below must NEVER carry us past the point where a
+  // correction is still possible. Predictions older than the ring have no
+  // snapshot left to rewind to, so advancing there converts "peer is slow" into
+  // a guaranteed desync. Observed at ahead=72 against a browser-throttled peer,
+  // heading for the 128-frame ring.
+  if (ahead >= (uint32_t)(RB_N / 2)) { s->stalls++; return 1; }
+
   // A peer that has genuinely gone away must not freeze us forever; after a few
   // stalled ticks, run anyway and let prediction carry it.
   if (s->stall_run >= 6) { s->stall_run = 0; return 0; }
 
   // Hard limit: never predict further ahead than the ring and the design allow.
-  if (s->frame > s->confirmed + (uint32_t)MAX_ROLLBACK) {
+  if (ahead > (uint32_t)MAX_ROLLBACK) {
     s->stall_run++; s->stalls++; return 1;
   }
   // Soft limit: keep the two clocks married, so neither side banks a large
@@ -197,6 +206,9 @@ int rb_build_packet(RbSession *s, uint8_t *buf, int cap) {
     }
   }
   if (s->desync) p.flags |= PKT_FLAG_DESYNC;
+  // Tell the peer we are backgrounded. A throttled tab starves the other side,
+  // and "opponent tabbed out" is a diagnosis; an unexplained freeze is not.
+  if (s->local_hidden) p.flags |= PKT_FLAG_HIDDEN;
 
   int n = proto_encode_input(buf, cap, &p);
   if (n > 0) s->packets_out++;

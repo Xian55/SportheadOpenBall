@@ -79,6 +79,8 @@ static void net_frame(void) {
     return;
   }
 
+  g_rb.local_hidden = (uint8_t)(net_local_hidden() ? 1 : 0);
+
   g_acc += (double)GetFrameTime();
   if (g_acc > 0.25) g_acc = 0.25;
 
@@ -91,21 +93,43 @@ static void net_frame(void) {
     uint8_t in = (uint8_t)(input_consume(0) | g_force_in[0]);
     g_prev = g_rb.live;
     rb_tick(&g_rb, in);
-    int pn = rb_build_packet(&g_rb, buf, (int)sizeof buf);
-    if (pn > 0) net_send(buf, pn);
     steps++;
   }
   if (steps == MAX_CATCHUP) g_acc = 0.0;
+
+  // Send EVERY frame, not only when a tick ran. Sending from inside the tick
+  // loop meant a stalled peer went silent, which starved the other peer's
+  // `confirmed` and made it stall too - the two then deadlocked, creeping
+  // forward only via the anti-deadlock escape hatch. Eighteen simulated frames
+  // in ten seconds.
+  //
+  // A stalled peer has no NEW input to offer, but the packet still carries the
+  // last INPUT_HIST frames and the ack, which is exactly what the other side
+  // needs to advance and stop stalling.
+  {
+    int pn = rb_build_packet(&g_rb, buf, (int)sizeof buf);
+    if (pn > 0) net_send(buf, pn);
+  }
 
   if (g_rb.desync) {
     static char msg[96];
     snprintf(msg, sizeof msg, "DESYNC at frame %u  %08x vs %08x",
              g_rb.desync_frame, g_rb.desync_mine, g_rb.desync_theirs);
     render_set_status(msg);
+  } else if (g_rb.peer_flags & PKT_FLAG_HIDDEN) {
+    // Name it. A throttled peer looks exactly like a broken connection, and the
+    // player can act on "they tabbed out" but not on a silent freeze.
+    render_set_status("opponent tabbed out - their game is throttled");
   } else if (!getenv("OB_NONETSTAT")) {
     static char msg[96];
-    snprintf(msg, sizeof msg, "seat %d  f%u  ahead %d  rollbacks %u  resim %u  stalls %u",
-             g_rb.seat, g_rb.frame, (int)(g_rb.frame - g_rb.confirmed),
+    // Render rate belongs here: a browser throttles a BACKGROUND tab's
+    // requestAnimationFrame to about 1 Hz, which starves the sim and looks
+    // exactly like a netcode fault. Without this number on screen the two are
+    // indistinguishable.
+    double el = GetTime() - g_t0;
+    snprintf(msg, sizeof msg, "seat %d  f%u  %.0ffps  ahead %d  rb %u  resim %u  stalls %u",
+             g_rb.seat, g_rb.frame, el > 0.5 ? (double)g_frames / el : 0.0,
+             (int)(g_rb.frame - g_rb.confirmed),
              g_rb.rollbacks, g_rb.resim_frames, g_rb.stalls);
     render_set_status(msg);
   }
@@ -263,6 +287,18 @@ int main(void) {
     g_room[i] = 0;
   }
   g_net_mode = (getenv("OB_PEER") != NULL) || (room && *room);
+
+  // An invite link (?room=CODE) is enough on its own to start a networked match,
+  // so a shared URL needs no further UI to act on.
+  if (!g_net_mode) {
+    char url_room[32];
+    if (net_url_room(url_room, (int)sizeof url_room) && url_room[0]) {
+      size_t i = 0;
+      while (url_room[i] && i < sizeof g_room - 1) { g_room[i] = url_room[i]; i++; }
+      g_room[i] = 0;
+      g_net_mode = 1;
+    }
+  }
 
   render_init();
   touch_init();

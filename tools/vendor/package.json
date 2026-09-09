@@ -1,0 +1,1 @@
+{"name":"ob-vendor","private":true,"type":"module","dependencies":{"esbuild":"^0.28.2","trystero":"^0.25.4"}}

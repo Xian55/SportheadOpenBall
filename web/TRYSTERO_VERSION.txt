@@ -1,0 +1,10 @@
+trystero 0.25.4  (entry: trystero/nostr)
+sha256  8c668502bee914e7789f3e18046af98d0376073231aaf6cccdf0a70e38f42722
+bundled with esbuild --bundle --format=esm --minify --target=es2020
+
+Vendored deliberately rather than loaded from a CDN. The Pages site must keep
+working if a CDN changes, rate-limits or is blocked, and a committed bundle
+means no third-party script origin on a page players keep open. Regenerate with
+tools/vendor_trystero.cmd and commit the result, updating this file.
+
+Trystero is MIT licensed; see web/trystero-LICENSE.txt.
