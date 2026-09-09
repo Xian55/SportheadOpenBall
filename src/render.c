@@ -48,7 +48,15 @@ static float stroke(float n) {
 }
 
 static char g_status[96];
+static char g_diag[192];
 static int  g_local_seat = -1;
+
+void render_set_diag(const char *msg) {
+  if (!msg) { g_diag[0] = 0; return; }
+  int i = 0;
+  while (msg[i] && i < (int)sizeof g_diag - 1) { g_diag[i] = msg[i]; i++; }
+  g_diag[i] = 0;
+}
 
 void render_set_local_seat(int seat) { g_local_seat = seat; }
 
@@ -332,5 +340,17 @@ void render_frame(const GameState *prev, const GameState *cur, float alpha) {
     // Touch controls go here, in SCREEN space and outside the pitch transform,
     // so they keep a usable physical size instead of shrinking with the pitch.
     touch_draw();
+
+    // ?diag readout, also SCREEN space and deliberately outside the scissor: if
+    // the framebuffer and the viewport disagree this is the one thing on screen
+    // whose position is not suspect, and it must stay legible in a photograph of
+    // a phone, hence sizing it off the screen height.
+    if (g_diag[0]) {
+      int fs = GetScreenHeight() / 26;
+      if (fs < 14) fs = 14;
+      int tw = MeasureText(g_diag, fs);
+      DrawRectangle(0, 0, tw + 16, fs + 10, Fade(BLACK, 0.75f));
+      DrawText(g_diag, 8, 5, fs, (Color){ 255, 230, 120, 255 });
+    }
   EndDrawing();
 }

@@ -185,30 +185,63 @@ static void net_frame(void) {
 // coordinate is scaled by the InitWindow-time ratio until we push the real CSS
 // size back through SetWindowSize. Without this, menu hit-testing and touch
 // button hit-testing are wrong the moment anyone goes fullscreen.
+// Sizing the drawing buffer in DEVICE pixels rather than CSS pixels is what
+// makes a phone render at its real resolution instead of being upscaled by the
+// browser. It is correct on desktop (verified at a forced devicePixelRatio of 3:
+// canvas.width tracked the requested size exactly and the scene filled the
+// canvas), but on a real phone it put the framebuffer at exactly TWICE the
+// viewport raylib had set, so everything drew at half scale in the bottom-left
+// corner, and SetWindowSize never settled - it fired every frame, which is what
+// spammed "GetWindowScaleDPI() not implemented on target platform".
+//
+// Two parties end up sizing that canvas and on the phone they disagree. Until I
+// can see the actual numbers from a device, CSS-pixel sizing - the M4 behaviour
+// that shipped and worked - is the default, and the device-pixel path is opt-in
+// via ?hidpi. OB_DIAG below is what should identify the second writer.
+static int g_hidpi;     // ?hidpi  - size the buffer in device pixels
+static int g_diag;      // ?diag   - draw the size readout
+
 static void sync_canvas_size(void) {
   double cw = 0, ch = 0;
   if (emscripten_get_element_css_size("#canvas", &cw, &ch) != EMSCRIPTEN_RESULT_SUCCESS) return;
 
-  // Size the DRAWING BUFFER in device pixels, not CSS pixels. The CSS size keeps
-  // the canvas filling the viewport; the buffer is what we actually rasterise
-  // into. Sizing it in CSS pixels on a phone with devicePixelRatio 3 meant
-  // rendering at a third of the screen's real resolution and letting the browser
-  // upscale - which is exactly what "high resolution and yet blurry" looks like.
-  //
-  // Capped at 2x: beyond that the fill-rate cost on a phone outweighs any
-  // visible sharpening.
-  double dpr = emscripten_get_device_pixel_ratio();
-  if (dpr < 1.0) dpr = 1.0;
-  if (dpr > 2.0) dpr = 2.0;
+  double dpr = 1.0;
+  if (g_hidpi) {
+    // Capped at 2x: beyond that the fill-rate cost on a phone outweighs any
+    // visible sharpening.
+    dpr = emscripten_get_device_pixel_ratio();
+    if (dpr < 1.0) dpr = 1.0;
+    if (dpr > 2.0) dpr = 2.0;
+  }
 
   int w = (int)(cw * dpr + 0.5), h = (int)(ch * dpr + 0.5);
   if (w > 0 && h > 0 && (w != GetScreenWidth() || h != GetScreenHeight())) SetWindowSize(w, h);
+}
+
+// The whole point is to catch the two sizes DISAGREEING. If the canvas backing
+// store is not what raylib thinks the framebuffer is, the GL viewport covers
+// only part of the canvas and everything lands small in a corner - so print
+// both, plus what each side derived from them.
+static void update_diag(void) {
+  if (!g_diag) { render_set_diag(NULL); return; }
+  double cw = 0, ch = 0;
+  int bw = 0, bh = 0;
+  emscripten_get_element_css_size("#canvas", &cw, &ch);
+  emscripten_get_canvas_element_size("#canvas", &bw, &bh);
+  char msg[192];
+  snprintf(msg, sizeof msg,
+           "dpr %.2f  css %dx%d  buf %dx%d  screen %dx%d  render %dx%d  hidpi %d",
+           emscripten_get_device_pixel_ratio(), (int)cw, (int)ch, bw, bh,
+           GetScreenWidth(), GetScreenHeight(), GetRenderWidth(), GetRenderHeight(),
+           g_hidpi);
+  render_set_diag(msg);
 }
 #endif
 
 static void frame(void) {
 #ifdef __EMSCRIPTEN__
   sync_canvas_size();
+  update_diag();
 #endif
 
   touch_update();
@@ -300,6 +333,15 @@ int main(void) {
   if (ss) g_simshot = (uint32_t)strtoul(ss, NULL, 0);
   const char *seed = getenv("OB_SEED");
   if (seed) g_seed = (uint32_t)strtoul(seed, NULL, 0);
+
+#ifdef __EMSCRIPTEN__
+  // Read straight from the query string rather than adding another entry to the
+  // transport shim: these are presentation switches, not networking.
+  g_hidpi = emscripten_run_script_int(
+      "(new URLSearchParams(location.search).has('hidpi'))?1:0");
+  g_diag  = emscripten_run_script_int(
+      "(new URLSearchParams(location.search).has('diag'))?1:0");
+#endif
 
   SetTraceLogLevel(LOG_WARNING);
   // FLAG_WINDOW_HIGHDPI is REQUIRED on a scaled display, from raylib 5.5's

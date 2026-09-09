@@ -22,6 +22,11 @@
 // Pass NULL or "" to clear.
 void render_set_status(const char *msg);
 
+// A small screen-space size readout for ?diag, drawn outside the pitch transform
+// so its position is trustworthy even when the viewport and the framebuffer
+// disagree. Pass NULL to clear.
+void render_set_diag(const char *msg);
+
 // Which seat this window drives, or -1 for hotseat. Draws a marker over your own
 // player: with two windows open, that is what makes it obvious at a glance
 // whether both are showing the SAME game.
