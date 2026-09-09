@@ -181,32 +181,24 @@ static void net_frame(void) {
 }
 
 #ifdef __EMSCRIPTEN__
-// raylib's web backend resizes the canvas behind GLFW's back, so every mouse
-// coordinate is scaled by the InitWindow-time ratio until we push the real CSS
-// size back through SetWindowSize. Without this, menu hit-testing and touch
-// button hit-testing are wrong the moment anyone goes fullscreen.
-// Sizing the drawing buffer in DEVICE pixels rather than CSS pixels is what
-// makes a phone render at its real resolution instead of being upscaled by the
-// browser. It is correct on desktop (verified at a forced devicePixelRatio of 3:
-// canvas.width tracked the requested size exactly and the scene filled the
-// canvas), but on a real phone it put the framebuffer at exactly TWICE the
-// viewport raylib had set, so everything drew at half scale in the bottom-left
-// corner, and SetWindowSize never settled - it fired every frame, which is what
-// spammed "GetWindowScaleDPI() not implemented on target platform".
+// Size the DRAWING BUFFER in device pixels, not CSS pixels. The CSS size keeps
+// the canvas filling the viewport; the buffer is what we actually rasterise
+// into. Sizing it in CSS pixels on a phone with devicePixelRatio 3 meant
+// rendering at a third of the screen's real resolution and letting the browser
+// upscale - which is exactly what "high resolution and yet blurry" looks like.
 //
-// Two parties end up sizing that canvas and on the phone they disagree. Until I
-// can see the actual numbers from a device, CSS-pixel sizing - the M4 behaviour
-// that shipped and worked - is the default, and the device-pixel path is opt-in
-// via ?hidpi. OB_DIAG below is what should identify the second writer.
-static int g_hidpi;     // ?hidpi  - size the buffer in device pixels
-static int g_diag;      // ?diag   - draw the size readout
+// This only works because FLAG_WINDOW_RESIZABLE is cleared on web (see main),
+// making this the SINGLE writer of the canvas size. With raylib's own resize
+// handler live, the two fought and the phone drew at half scale.
+static int g_nohidpi;   // ?nohidpi - fall back to CSS-pixel sizing
+static int g_diag;      // ?diag    - draw the size readout
 
 static void sync_canvas_size(void) {
   double cw = 0, ch = 0;
   if (emscripten_get_element_css_size("#canvas", &cw, &ch) != EMSCRIPTEN_RESULT_SUCCESS) return;
 
   double dpr = 1.0;
-  if (g_hidpi) {
+  if (!g_nohidpi) {
     // Capped at 2x: beyond that the fill-rate cost on a phone outweighs any
     // visible sharpening.
     dpr = emscripten_get_device_pixel_ratio();
@@ -215,7 +207,18 @@ static void sync_canvas_size(void) {
   }
 
   int w = (int)(cw * dpr + 0.5), h = (int)(ch * dpr + 0.5);
-  if (w > 0 && h > 0 && (w != GetScreenWidth() || h != GetScreenHeight())) SetWindowSize(w, h);
+  if (w <= 0 || h <= 0) return;
+
+  // Tolerate a pixel. emscripten_get_element_css_size reports a FRACTIONAL size
+  // and the sizes downstream get floored, so an exact comparison can miss by one
+  // forever - which turns this into a SetWindowSize on every single frame rather
+  // than a one-off on genuine resizes.
+  int dw = w - GetScreenWidth(),  dh = h - GetScreenHeight();
+  if (dw < 0) dw = -dw;
+  if (dh < 0) dh = -dh;
+  if (dw <= 1 && dh <= 1) return;
+
+  SetWindowSize(w, h);
 }
 
 // The whole point is to catch the two sizes DISAGREEING. If the canvas backing
@@ -233,7 +236,7 @@ static void update_diag(void) {
            "dpr %.2f  css %dx%d  buf %dx%d  screen %dx%d  render %dx%d  hidpi %d",
            emscripten_get_device_pixel_ratio(), (int)cw, (int)ch, bw, bh,
            GetScreenWidth(), GetScreenHeight(), GetRenderWidth(), GetRenderHeight(),
-           g_hidpi);
+           g_nohidpi ? 0 : 1);
   render_set_diag(msg);
 }
 #endif
@@ -337,8 +340,8 @@ int main(void) {
 #ifdef __EMSCRIPTEN__
   // Read straight from the query string rather than adding another entry to the
   // transport shim: these are presentation switches, not networking.
-  g_hidpi = emscripten_run_script_int(
-      "(new URLSearchParams(location.search).has('hidpi'))?1:0");
+  g_nohidpi = emscripten_run_script_int(
+      "(new URLSearchParams(location.search).has('nohidpi'))?1:0");
   g_diag  = emscripten_run_script_int(
       "(new URLSearchParams(location.search).has('diag'))?1:0");
 #endif
@@ -354,7 +357,33 @@ int main(void) {
   // installs a screenScale matrix - so drawing still uses LOGICAL coordinates
   // (GetScreenWidth/Height) and raylib scales them onto the full buffer. That is
   // why the letterbox maths in render.c uses the logical size.
+  //
+  // Both of those flags are WRONG on web, and one of them was the phone bug.
+  // FLAG_WINDOW_RESIZABLE is the only thing gating raylib's own
+  // EmscriptenResizeCallback, which on every window resize event does:
+  //
+  //     int width = EM_ASM_INT( return window.innerWidth; );   // CSS pixels
+  //     emscripten_set_canvas_element_size("#canvas", width, height);
+  //     SetupViewport(width, height);
+  //
+  // That hardcodes CSS pixels into both the canvas backing store and the GL
+  // viewport, so it fights sync_canvas_size, which writes DEVICE pixels. On a
+  // phone the URL bar hiding and showing fires resize events constantly, and
+  // whichever writer ran last won each half: framebuffer = dpr x viewport,
+  // which drew everything at half scale in the bottom-left corner (GL's origin)
+  // and left SetWindowSize firing every frame. A desktop window fires no resize
+  // events, which is exactly why it could not reproduce. Clearing the flag makes
+  // sync_canvas_size the single writer; SetWindowSize still works, because
+  // GLFW.setWindowSize has no resizable check.
+  //
+  // FLAG_WINDOW_HIGHDPI is a pure no-op on web - GetWindowScaleDPI() is a stub
+  // returning 1,1 - except that WindowSizeCallback calls it on every resize and
+  // it logs. That is the "GetWindowScaleDPI() not implemented" spam.
+#ifdef __EMSCRIPTEN__
+  SetConfigFlags(FLAG_VSYNC_HINT);
+#else
   SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
+#endif
   InitWindow(1280, 720, "SportheadOpenBall " OB_VERSION);
   SetTargetFPS(60);
 

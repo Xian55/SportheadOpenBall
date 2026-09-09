@@ -160,25 +160,42 @@ goal-celebration overlay) and **kick impulse**. Do not present either as derived
 - **Size strokes in PHYSICAL pixels, not virtual units.** `stroke(n)` in `render.c`
   returns the virtual width that covers `n` whole framebuffer pixels, and never returns
   less than `n`. Virtual-unit hairlines are the first thing a scaled-down pitch loses.
-- **Sizing the web canvas buffer in DEVICE pixels is UNSOLVED — it is behind `?hidpi`,
-  off by default.** Sizing in CSS pixels means a phone at dPR 3 renders at a third of its
-  real resolution and the browser upscales — "high resolution and yet blurry" — so the
-  win is real, but the fix as written breaks a real phone. `SetWindowSize(css * dpr)` is
-  correct on desktop (verified at a forced `devicePixelRatio` of 3: `buf == screen ==
-  render`, scene fills the canvas) and on an Android phone put the framebuffer at exactly
-  **twice** the viewport raylib had set: everything drew at half scale anchored
-  bottom-left, and `SetWindowSize` fired every frame instead of settling, which is what
-  spammed `GetWindowScaleDPI() not implemented on target platform` (raylib only calls
-  that stub from `WindowSizeCallback` when `FLAG_WINDOW_HIGHDPI` is set).
-  Two parties size that canvas and on the phone they disagree. **Do not re-attempt this
-  from reasoning alone** — I got the mechanism wrong twice guessing at
-  `GLFW.getHiDPIScale()` and at the 2x cap, and desktop cannot reproduce it. Use
-  `?diag`, which prints `dpr / css / buf / screen / render` in screen space, outside the
-  pitch transform so its own position is trustworthy; whichever of `buf`, `screen`,
-  `render` disagrees on the device names the second writer.
-  Input is NOT the hard part here: raylib's `EmscriptenTouchCallback` already scales
-  touches by `GetScreenWidth()/cssWidth`, and emscripten's GLFW `calculateMouseCoords`
-  by `GLFW.active.width/rect.width`, so both follow the buffer automatically.
+- **NEVER set `FLAG_WINDOW_RESIZABLE` on web.** It is the only thing gating raylib's
+  `EmscriptenResizeCallback`, which on every window resize event does:
+
+  ```c
+  int width = EM_ASM_INT( return window.innerWidth; );   // CSS pixels
+  emscripten_set_canvas_element_size("#canvas", width, height);
+  SetupViewport(width, height);
+  ```
+
+  That hardcodes CSS pixels into both the canvas backing store and the GL viewport, so it
+  fights any code that sizes the canvas itself. With `sync_canvas_size` writing DEVICE
+  pixels, whichever writer ran last won each half and the framebuffer ended up
+  `dpr x viewport`: everything drew at half scale anchored bottom-left (GL's origin) and
+  `SetWindowSize` fired every frame instead of settling. On a phone the URL bar hiding
+  and showing fires resize events constantly; a static desktop window fires none, which
+  is exactly why desktop could not reproduce it for two rounds of guessing.
+  **To reproduce on desktop: `window.dispatchEvent(new Event('resize'))`.** With the flag
+  set, `buf` and `css` visibly oscillate and their ratio lands on `devicePixelRatio`.
+- **`FLAG_WINDOW_HIGHDPI` is a no-op on web** — `GetWindowScaleDPI()` is a stub returning
+  `1,1` and the HIGHDPI branch of `WindowSizeCallback` divides by it — except that the
+  stub logs, which is the `GetWindowScaleDPI() not implemented on target platform` spam.
+  It is REQUIRED natively (above) and pointless on web, so it is set per-platform.
+- **The web canvas buffer is sized in DEVICE pixels** by `sync_canvas_size`: CSS size x
+  `emscripten_get_device_pixel_ratio()`, capped at 2x for fill rate. In CSS pixels a phone
+  at dPR 3 renders at a third of its real resolution and the browser upscales — "high
+  resolution and yet blurry". This is only safe because the flag above makes it the single
+  writer. It also tolerates a 1 px difference before calling `SetWindowSize`, because
+  `emscripten_get_element_css_size` reports a FRACTIONAL size and the values downstream
+  get floored — an exact comparison can miss by one forever and resize every frame.
+  Input needs no matching fix: raylib's `EmscriptenTouchCallback` already scales touches
+  by `GetScreenWidth()/cssWidth`, and emscripten's GLFW `calculateMouseCoords` by
+  `GLFW.active.width/rect.width`, so both follow the buffer automatically.
+  `?diag` prints `dpr / css / buf / screen / render` in screen space, outside the pitch
+  transform so its own position is trustworthy when the viewport is wrong; `buf`,
+  `screen` and `render` agreeing is the healthy state. `?nohidpi` falls back to CSS-pixel
+  sizing.
 - **raylib's default font is a 10px bitmap.** Scaled to 44px its zero glyph legitimately
   looks like a rectangle with a slot. That is not tofu and not a bug — do not go hunting
   for a font problem. Verified by dumping the string bytes: `30 20 20 2d 20 20 30`.
@@ -280,8 +297,7 @@ Landing with the netcode: `OB_ROOM`, `OB_NETSTAT`, `OB_LAG_MS`, `OB_JITTER_MS`, 
 
 Web-only, read from the query string because the interesting failures only happen on a
 real device: `?diag` draws `dpr / css / buf / screen / render` in screen space, and
-`?hidpi` opts into device-pixel canvas sizing (see the gotcha above — off by default
-because it breaks a real phone). They combine: `?diag&hidpi`.
+`?nohidpi` falls back to CSS-pixel canvas sizing. They combine: `?diag&nohidpi`.
 
 ## Milestones
 
