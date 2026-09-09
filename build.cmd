@@ -4,6 +4,8 @@ rem   build.cmd              native game + test exes -> ..\SportheadOpenBall_bui
 rem   build.cmd test         native build + headless tests vs the committed goldens
 rem   build.cmd determinism  native vs wasm replay, byte-compared (THE gate)
 rem   build.cmd web          wasm build (needs emsdk) -> ..\SportheadOpenBall_build\web
+rem   build.cmd all          native + tests + wasm. Run before pushing: a change
+rem                          that builds natively can still fail to LINK on wasm.
 rem First configure downloads raylib 5.5 via CMake FetchContent (needs git + network).
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -32,6 +34,7 @@ if errorlevel 1 (
 if /i "%~1"=="web"         goto :web
 if /i "%~1"=="test"        goto :test
 if /i "%~1"=="determinism" goto :determinism
+if /i "%~1"=="all"         goto :all
 
 :native
 rem configure only once: cmake --build re-runs it automatically when
@@ -78,6 +81,16 @@ node "%OUT%\web\replay_test.js" > "%TEMP%\ob_wasm.txt" || exit /b 1
 fc /w "%TEMP%\ob_native.txt" "%TEMP%\ob_wasm.txt" >nul || (echo NATIVE AND WASM DISAGREE - determinism is broken & exit /b 1)
 echo.
 echo native == wasm, byte for byte.
+exit /b 0
+
+:all
+rem Both targets. The transport is chosen per-platform, so it is entirely
+rem possible to add code that builds natively and leaves wasm with an undefined
+rem symbol - which is exactly how the pipeline broke once.
+call "%~f0" test || exit /b 1
+call "%~f0" web  || exit /b 1
+echo.
+echo native + tests + wasm all good.
 exit /b 0
 
 :web

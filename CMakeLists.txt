@@ -55,7 +55,11 @@ target_compile_definitions(openball PRIVATE OB_VERSION="${OB_VERSION}")
 
 # Transport is selected here and nowhere else.
 if (EMSCRIPTEN)
-  # src/net_web.c lands in M4.
+  # net_web.c lands in M4. Until then a stub satisfies net.h so main.c can be
+  # written once against the interface instead of being littered with
+  # #ifdef __EMSCRIPTEN__ - and so the wasm build LINKS, which it did not when
+  # this branch supplied no transport at all.
+  target_sources(openball PRIVATE src/net_null.c)
 else()
   target_sources(openball PRIVATE src/net_udp.c)
   if (WIN32)
