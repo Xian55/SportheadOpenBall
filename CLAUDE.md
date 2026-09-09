@@ -100,6 +100,46 @@ Still NOT measured, and flagged as provisional in `config.h`: **jump height**
 (three tracking attempts were defeated by the animated crowd and the
 goal-celebration overlay) and **kick impulse**. Do not present either as derived.
 
+## Netcode gotchas (M3/M4), all found by running it rather than by tests
+
+- **Send a packet EVERY frame, never only when a tick runs.** Building the packet
+  inside the tick loop meant a stalled peer went silent, which starved the other
+  peer's `confirmed` and made it stall too. The two deadlocked and crept forward
+  only via the anti-deadlock escape hatch: eighteen simulated frames in ten
+  seconds. A stalled peer has no new input to offer, but the packet still carries
+  the input history and the ack the other side needs. Fixing it took UDP stalls at
+  60 ms from 250 to 0.
+- **The anti-deadlock escape hatch must be BOUNDED.** It exists so a dead peer
+  cannot freeze us forever, but unbounded it drove `frame - confirmed` to 72 and
+  climbing against a throttled peer. Past `RB_N` there is no snapshot left to
+  rewind to, so "peer is slow" would have become a guaranteed desync. Hard-stall
+  at `RB_N/2` whatever else is true.
+- **Verify a peer's checksum only once OUR copy of that frame is settled** - below
+  `confirmed`, with no rewind pending. Comparing on arrival gives constant false
+  desyncs, because the frame may still be predicted locally or have an unapplied
+  correction queued. That bug failed 60 of 85 rollback_test cases, and every
+  failure said "desync flag raised" while none said "peer != lockstep" - the
+  states were always right, the detector was wrong.
+- **Two browser tabs in one window cannot test this.** Only one tab is visible, so
+  the other is throttled to ~1 Hz, and since the sim advances only when both peers
+  supply inputs the visible side is dragged down with it - about a hundredfold
+  slowdown. Use two separate WINDOWS side by side: browsers throttle on tab
+  visibility, not window focus. The game now pauses explicitly and names which
+  side is backgrounded rather than crawling.
+- **Trystero 0.25 API, checked against the shipped README rather than memory:**
+  `onPeerJoin`/`onPeerLeave` are assignable PROPERTIES, not methods (calling them
+  throws "is not a function"); redundancy lives under `relayConfig`; and
+  `joinRoom`'s third `callbacks` argument carries `onJoinError`, which separates
+  "no peer found" from "peers exchanged SDP but WebRTC could not connect" - the
+  strict-NAT case worth naming precisely.
+- **Trystero actions are reliable and ordered**, which is the opposite of what
+  rollback wants. It does SIGNALLING ONLY; game data rides our own negotiated
+  channel on the `RTCPeerConnection` from `getPeers()`, unordered with zero
+  retransmits. Losing a packet is free (every packet carries `INPUT_HIST` frames);
+  waiting for a retransmit stalls inputs already superseded.
+- **Connection is not instant.** Relay discovery plus the WebRTC handshake takes
+  10-20 s. Always show progress; a silent wait is indistinguishable from a hang.
+
 ## Gotchas learned the hard way
 
 - **Windows display scaling breaks raylib's framebuffer assumptions.** At 125% a 1280x720
@@ -215,12 +255,16 @@ Landing with the netcode: `OB_ROOM`, `OB_NETSTAT`, `OB_LAG_MS`, `OB_JITTER_MS`, 
   physics measured from the original. Open: touch buttons overlay the goalmouths in
   landscape, and the Windows DPI viewport mismatch (fails safely - whole field
   visible, black bars).
-- **M2** — determinism harness: `fixed_test`, `const_test`, golden replay diffed
-  native-vs-wasm-under-node. That diff is the real gate; everything else is prevention.
-- **M3** — rollback over UDP loopback with injected lag/jitter/loss; `rollback_test`
-  asserts rollback is byte-identical to lockstep, on a virtual clock.
-- **M4** — WebRTC transport, vendored Trystero, seat negotiation.
-- **M5** — room UI, polish, sprites, ship.
+- **M2 done** — determinism harness. `fixed_test`, `const_test`, and a golden replay
+  diffed native-vs-wasm-under-node. That diff is the real gate; everything else is
+  prevention.
+- **M3 done** — rollback netcode. `rollback_test` proves it byte-identical to lockstep
+  across 85 lag x loss x seed cases on a virtual clock; `net_udp.c` gives two native
+  processes a real socket with injected lag/jitter/loss.
+- **M4 done** — WebRTC transport over vendored Trystero. Confirmed by a real match
+  between two devices across the internet, with no backend.
+- **M5** — room UI (so nobody has to hand-edit a URL), sprites via the Aseprite
+  pipeline, sound, match polish.
 
 ## On the original game
 
