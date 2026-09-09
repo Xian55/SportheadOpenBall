@@ -81,6 +81,26 @@ static void net_frame(void) {
 
   g_rb.local_hidden = (uint8_t)(net_local_hidden() ? 1 : 0);
 
+  // If either side is backgrounded, PAUSE rather than crawl. A hidden tab gets
+  // animation frames at about 1 Hz, and because both peers must supply inputs
+  // for the sim to advance, the visible side is dragged down with it - roughly
+  // a hundredfold slowdown that looks like a broken game rather than a
+  // throttled tab. Stopping is safe: the simulation only ever advances when
+  // both inputs exist, so neither side can drift.
+  int paused = g_rb.local_hidden || (g_rb.peer_flags & PKT_FLAG_HIDDEN);
+  if (paused) {
+    g_acc = 0.0;
+    render_set_status(g_rb.local_hidden
+      ? "paused - this tab is in the background"
+      : "paused - opponent tabbed out");
+    // Keep talking: the packet carries our hidden flag and the ack, so the far
+    // side learns why it is paused and both resume together.
+    int pn = rb_build_packet(&g_rb, buf, (int)sizeof buf);
+    if (pn > 0) net_send(buf, pn);
+    render_frame(&g_prev, &g_rb.live, 0.0f);
+    return;
+  }
+
   g_acc += (double)GetFrameTime();
   if (g_acc > 0.25) g_acc = 0.25;
 
@@ -116,10 +136,6 @@ static void net_frame(void) {
     snprintf(msg, sizeof msg, "DESYNC at frame %u  %08x vs %08x",
              g_rb.desync_frame, g_rb.desync_mine, g_rb.desync_theirs);
     render_set_status(msg);
-  } else if (g_rb.peer_flags & PKT_FLAG_HIDDEN) {
-    // Name it. A throttled peer looks exactly like a broken connection, and the
-    // player can act on "they tabbed out" but not on a silent freeze.
-    render_set_status("opponent tabbed out - their game is throttled");
   } else if (!getenv("OB_NONETSTAT")) {
     static char msg[96];
     // Render rate belongs here: a browser throttles a BACKGROUND tab's
