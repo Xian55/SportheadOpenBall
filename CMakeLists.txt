@@ -53,8 +53,15 @@ target_include_directories(openball PRIVATE src)
 target_link_libraries(openball raylib)
 target_compile_definitions(openball PRIVATE OB_VERSION="${OB_VERSION}")
 
-# Transport is selected here and nowhere else (added in M3/M4):
-#   if (EMSCRIPTEN) src/net_web.c  else  src/net_udp.c + ws2_32
+# Transport is selected here and nowhere else.
+if (EMSCRIPTEN)
+  # src/net_web.c lands in M4.
+else()
+  target_sources(openball PRIVATE src/net_udp.c)
+  if (WIN32)
+    target_link_libraries(openball ws2_32)
+  endif()
+endif()
 
 if (EMSCRIPTEN)
   # OUTPUT_NAME index so GitHub Pages serves the game at the site root with no

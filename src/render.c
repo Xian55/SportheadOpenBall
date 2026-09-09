@@ -29,6 +29,18 @@ static RenderTexture2D g_target;
 static float  g_scale = 1.0f;   // virtual -> screen
 static Vector2 g_offset;        // letterbox origin, screen px
 
+static char g_status[96];
+static int  g_local_seat = -1;
+
+void render_set_local_seat(int seat) { g_local_seat = seat; }
+
+void render_set_status(const char *msg) {
+  if (!msg) { g_status[0] = 0; return; }
+  int i = 0;
+  while (msg[i] && i < (int)sizeof g_status - 1) { g_status[i] = msg[i]; i++; }
+  g_status[i] = 0;
+}
+
 void render_init(void) {
   g_target = LoadRenderTexture(VIRT_W, VIRT_H);
   SetTextureFilter(g_target.texture, TEXTURE_FILTER_BILINEAR);
@@ -190,9 +202,28 @@ static void draw_scene(const GameState *s) {
   draw_player(&s->p[0], P0COL, 0);
   draw_player(&s->p[1], P1COL, 1);
 
+  // Marker over the player this window actually controls.
+  if (g_local_seat == 0 || g_local_seat == 1) {
+    const Player *me = &s->p[g_local_seat];
+    float mx = FX2F(me->x), my = FX2F(me->y) - FX2F(HEAD_R) - 16.0f;
+    DrawTriangle((Vector2){ mx, my + 12.0f },
+                 (Vector2){ mx - 10.0f, my - 4.0f },
+                 (Vector2){ mx + 10.0f, my - 4.0f },
+                 Fade(RAYWHITE, 0.85f));
+    const char *tag = "YOU";
+    int fs = 14, tw = MeasureText(tag, fs);
+    DrawText(tag, (int)mx - tw / 2, (int)my - 22, fs, Fade(RAYWHITE, 0.7f));
+  }
+
   draw_ball(s);
   draw_hud(s);
   draw_banner(s);
+
+  if (g_status[0]) {
+    int fs = 26, tw = MeasureText(g_status, fs);
+    DrawRectangleRec((Rectangle){ 0, 96, FW, (float)fs + 18 }, Fade(BLACK, 0.55f));
+    DrawText(g_status, (int)(FW / 2) - tw / 2, 105, fs, RAYWHITE);
+  }
 }
 
 // Interpolate a position between ticks. A large jump means a teleport - kickoff

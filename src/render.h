@@ -15,6 +15,15 @@
 #define VIRT_W 1280
 #define VIRT_H 720
 
+// A short line drawn over the pitch: connection progress, desync, and the like.
+// Pass NULL or "" to clear.
+void render_set_status(const char *msg);
+
+// Which seat this window drives, or -1 for hotseat. Draws a marker over your own
+// player: with two windows open, that is what makes it obvious at a glance
+// whether both are showing the SAME game.
+void render_set_local_seat(int seat);
+
 void render_init(void);
 void render_shutdown(void);
 // Draws AND presents. `prev` is the state one tick before `cur`, and alpha is
