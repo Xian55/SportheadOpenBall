@@ -28,7 +28,9 @@ jobs:
       - name: Tests
         run: |
           B=../build-native
-          echo "--- fixed_test";  "$B/fixed_test"
+          echo "--- fixed_test";    "$B/fixed_test"
+          echo "--- proto_test";    "$B/proto_test"
+          echo "--- rollback_test"; "$B/rollback_test"
           echo "--- const_test";  "$B/const_test"  > c.txt
           diff --strip-trailing-cr tests/const_golden.txt  c.txt
           echo "--- replay_test"; "$B/replay_test" > r.txt
@@ -54,7 +56,9 @@ jobs:
       - name: Tests
         run: |
           B=../build-native
-          echo "--- fixed_test";  "$B/fixed_test.exe"
+          echo "--- fixed_test";    "$B/fixed_test.exe"
+          echo "--- proto_test";    "$B/proto_test.exe"
+          echo "--- rollback_test"; "$B/rollback_test.exe"
           echo "--- const_test";  "$B/const_test.exe"  > c.txt
           diff --strip-trailing-cr tests/const_golden.txt  c.txt
           echo "--- replay_test"; "$B/replay_test.exe" > r.txt

@@ -32,7 +32,9 @@ set(OB_VERSION "dev" CACHE STRING "version string shown in the window title")
 # ---------------------------------------------------------------------------
 add_library(ob_sim OBJECT
   src/sim.c
-  src/checksum.c)
+  src/checksum.c
+  src/proto.c
+  src/rollback.c)
 target_include_directories(ob_sim PUBLIC src)
 target_compile_options(ob_sim PRIVATE
   -fwrapv -Wall -Wextra
@@ -87,7 +89,7 @@ endif()
 # Headless tests: raylib-free, and deliberately NOT linked against m. A stray
 # sqrtf/fabs in tier 1 becomes a link error instead of a silent desync.
 # ---------------------------------------------------------------------------
-set(OB_TESTS fixed_test const_test replay_test)
+set(OB_TESTS fixed_test const_test replay_test proto_test rollback_test)
 
 if (NOT EMSCRIPTEN AND OB_DEV_TOOLS)
   foreach(t ${OB_TESTS})

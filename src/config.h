@@ -51,10 +51,12 @@
 #define LEG_LEN        FXI(54)      // pivot -> foot centre. > HEAD_R, necessarily.
 #define FOOT_R         FXI(10)
 #define P_MOVE         FXF(6.2)     // MEASURED: ~7 px/video-frame in the original, scaled
-// NOT measured: three attempts to track jump height from the video were
-// defeated by crowd animation and the goal-celebration overlay. Chosen instead
-// to give a ~150 px apex under the measured gravity, which is about what it
-// takes to head a ball at crossbar height. Treat as provisional.
+// NOT measured, but PLAY-VALIDATED: three attempts to track jump height from
+// the video were defeated by crowd animation and the goal-celebration overlay.
+// Chosen to give a ~150 px apex under the measured gravity, then confirmed by
+// playtesting as feeling right. That is weaker evidence than the MEASURED
+// constants above - it says "a human liked it", not "the original does this" -
+// so keep the distinction if the two ever disagree.
 #define P_JUMP         FXF(-5.90)
 #define P_MAX_VY       FXF(22.0)
 #define SPAWN_X_P0     FXI(320)
@@ -100,6 +102,8 @@
 #define E_POST         FXF(0.65)
 #define BALL_DRAG_X    FXF(0.998)   // MEASURED: horizontal retention 0.9978/frame
 #define BALL_FRIC_G    FXF(0.980)
+// Also NOT measured, also play-validated: only the ball speeds RESULTING from
+// kicks were measured, never the strike itself.
 #define KICK_IMPULSE   FXF(26.0)    // at LEG_VEL_REF; scaled by actual swing speed
 // A kick fires along a blend of the contact normal and the direction the foot
 // is actually SWINGING. The tangent is what lets you scoop: with the leg low
